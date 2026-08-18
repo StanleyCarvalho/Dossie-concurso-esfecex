@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { splitPdfText, mergeQuestionBatches } = require('../src/services/aiService');
+const {
+  splitPdfText,
+  mergeQuestionBatches,
+  normalizeExpectedQuestions,
+  getMissingQuestionNumbers
+} = require('../src/services/aiService');
 
 test('splitPdfText preserves the whole PDF using overlapping chunks', () => {
   const text = Array.from({ length: 60 }, (_, index) =>
@@ -22,4 +27,19 @@ test('mergeQuestionBatches removes overlap duplicates and orders question number
 
   assert.deepEqual(result.map(question => question.number), [1, 2, 3]);
   assert.equal(result[1].statement, 'enunciado mais completo');
+});
+
+test('normalization enforces the expected question range and reports gaps', () => {
+  const questions = [
+    { number: 1, statement: 'primeira' },
+    { number: 2, statement: 'segunda curta' },
+    { number: '2', statement: 'segunda mais completa', alt_a: 'A' },
+    { number: 4, statement: 'quarta' },
+    { number: 61, statement: 'texto auxiliar interpretado como questão' }
+  ];
+
+  const normalized = normalizeExpectedQuestions(questions, 60);
+  assert.deepEqual(normalized.map(question => question.number), [1, 2, 4]);
+  assert.equal(normalized[1].statement, 'segunda mais completa');
+  assert.deepEqual(getMissingQuestionNumbers(normalized, 5), [3, 5]);
 });
