@@ -134,6 +134,8 @@ p{ margin:0 0 1em; color:var(--text); }
 .btn:hover{ background:#d8b556; text-decoration:none; }
 .btn.secondary{ background:transparent; color:var(--text); border:1px solid var(--border); }
 .btn.secondary:hover{ background:var(--surface-2); border-color:var(--gold-dim); }
+.btn.danger{ background:transparent; color:var(--danger); border:1px solid var(--danger); padding:7px 10px; }
+.btn.danger:hover{ background:rgba(168,81,66,0.15); }
 .btn:disabled{ opacity:.5; cursor:not-allowed; }
 
 select, input[type=text], input[type=password], input[type=number], input[type=file]{

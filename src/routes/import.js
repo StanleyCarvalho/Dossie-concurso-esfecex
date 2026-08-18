@@ -16,7 +16,12 @@ const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } 
 router.get('/', async (req, res, next) => {
   try {
   const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
-  res.render('import', { exams, result: null });
+  const result = req.query.deleted === '1'
+    ? { success: true, message: 'Prova e questões vinculadas excluídas com sucesso.' }
+    : (req.query.deleteError === '1'
+      ? { success: false, error: 'Prova não encontrada ou você não tem permissão para excluí-la.' }
+      : null);
+  res.render('import', { exams, result });
   } catch (error) {
     next(error);
   }
@@ -103,6 +108,30 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
     }));
     const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
     res.render('import', { exams, result: { success: false, error: e.message } });
+  }
+});
+
+router.post('/:id/delete', async (req, res, next) => {
+  try {
+    const deletedExam = await db.one(`
+      DELETE FROM exams
+      WHERE id = $1 AND user_id = $2
+      RETURNING id, ano, num_questoes
+    `, [req.params.id, req.session.userId]);
+
+    if (!deletedExam) return res.redirect('/import?deleteError=1');
+
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'exam_deleted',
+      examId: deletedExam.id,
+      ano: deletedExam.ano,
+      questions: deletedExam.num_questoes,
+      userId: req.session.userId
+    }));
+    return res.redirect('/import?deleted=1');
+  } catch (error) {
+    return next(error);
   }
 });
 
