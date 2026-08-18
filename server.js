@@ -16,6 +16,8 @@ if (!process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET não configurada.');
 }
 
+app.set('trust proxy', 1);
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -29,6 +31,7 @@ app.use(session({
     createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET,
+  proxy: true,
   resave: false,
   saveUninitialized: false,
   cookie: {
