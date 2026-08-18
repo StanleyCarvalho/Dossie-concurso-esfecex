@@ -14,12 +14,12 @@ function shuffle(arr) {
  * Calcula a distribuição média de questões por disciplina com base
  * no histórico salvo (discipline_stats), normalizada para `totalQuestions`.
  */
-function getBlueprint(totalQuestions = 50) {
-  const rows = db.prepare(`
-    SELECT discipline, SUM(num_questions) as total, COUNT(DISTINCT exam_id) as exams
+async function getBlueprint(totalQuestions = 50) {
+  const rows = await db.query(`
+    SELECT discipline, SUM(num_questions)::int as total, COUNT(DISTINCT exam_id)::int as exams
     FROM discipline_stats
     GROUP BY discipline
-  `).all();
+  `);
 
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
   if (grandTotal === 0) return [];
@@ -39,7 +39,7 @@ function getBlueprint(totalQuestions = 50) {
  * de treino inéditas geradas por IA (claramente marcadas como tal).
  */
 async function buildSimulado({ totalQuestions = 50, durationMinutes = 240, useAiFill = true, userId = null }) {
-  const blueprint = getBlueprint(totalQuestions);
+  const blueprint = await getBlueprint(totalQuestions);
   if (blueprint.length === 0) {
     throw new Error('Sem dados históricos suficientes para montar o blueprint. Rode o seed ou importe provas primeiro.');
   }
@@ -54,10 +54,11 @@ async function buildSimulado({ totalQuestions = 50, durationMinutes = 240, useAi
   }
 
   const selected = [];
-  const getRealQuestions = db.prepare(`SELECT * FROM questions WHERE discipline = ? ORDER BY RANDOM() LIMIT ?`);
-
   for (const b of blueprint) {
-    const real = getRealQuestions.all(b.discipline, b.target);
+    const real = await db.query(
+      'SELECT * FROM questions WHERE discipline = $1 ORDER BY RANDOM() LIMIT $2',
+      [b.discipline, b.target]
+    );
     selected.push(...real);
     const missing = b.target - real.length;
     if (missing > 0 && useAiFill) {
@@ -78,41 +79,36 @@ async function buildSimulado({ totalQuestions = 50, durationMinutes = 240, useAi
 
   const finalQuestions = shuffle(selected).slice(0, totalQuestions);
 
-  const insertSimulado = db.prepare(`
+  const simulado = await db.one(`
     INSERT INTO simulados (title, blueprint_json, total_questions, duration_minutes, user_id)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const info = insertSimulado.run(
+    VALUES ($1, $2::jsonb, $3, $4, $5)
+    RETURNING id
+  `, [
     `Simulado ESFCEx Informática - ${new Date().toLocaleDateString('pt-BR')}`,
     JSON.stringify(blueprint),
     finalQuestions.length,
     durationMinutes,
     userId
-  );
-  const simuladoId = info.lastInsertRowid;
+  ]);
+  const simuladoId = simulado.id;
 
-  const insertSQ = db.prepare(`
-    INSERT INTO simulado_questions (simulado_id, question_id, order_index)
-    VALUES (?, ?, ?)
-  `);
-
-  // Para questões geradas por IA (sem id no banco principal), persistimos como questão avulsa
-  const insertAdhocQuestion = db.prepare(`
-    INSERT INTO questions (exam_id, number, discipline, topic, statement, alt_a, alt_b, alt_c, alt_d, alt_e, correct_letter, explanation, source)
-    VALUES (NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ai_practice')
-  `);
-
-  finalQuestions.forEach((q, idx) => {
-    let questionId = q.id;
-    if (!questionId) {
-      const r = insertAdhocQuestion.run(
-        q.discipline, q.topic || q.discipline, q.statement,
-        q.alt_a, q.alt_b, q.alt_c, q.alt_d, q.alt_e || null,
-        q.correct_letter, q.explanation || null
+  await db.transaction(async client => {
+    for (const [idx, q] of finalQuestions.entries()) {
+      let questionId = q.id;
+      if (!questionId) {
+        const result = await client.query(`
+          INSERT INTO questions (exam_id, number, discipline, topic, statement, alt_a, alt_b, alt_c, alt_d, alt_e, correct_letter, explanation, source)
+          VALUES (NULL, NULL, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ai_practice')
+          RETURNING id
+        `, [q.discipline, q.topic || q.discipline, q.statement, q.alt_a, q.alt_b, q.alt_c,
+          q.alt_d, q.alt_e || null, q.correct_letter, q.explanation || null]);
+        questionId = result.rows[0].id;
+      }
+      await client.query(
+        'INSERT INTO simulado_questions (simulado_id, question_id, order_index) VALUES ($1, $2, $3)',
+        [simuladoId, questionId, idx + 1]
       );
-      questionId = r.lastInsertRowid;
     }
-    insertSQ.run(simuladoId, questionId, idx + 1);
   });
 
   return simuladoId;

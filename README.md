@@ -1,5 +1,20 @@
 # ESFCEx Informática Prep
 
+## Banco de dados
+
+A aplicação utiliza PostgreSQL no Neon. Configure `DATABASE_URL` com a conexão agrupada
+(`-pooler`) e defina um `SESSION_SECRET` forte. O arquivo `.env.example` contém todas as
+variáveis necessárias, sem credenciais reais.
+
+Para preparar um banco vazio e carregar o conteúdo de referência:
+
+```bash
+npm run db:migrate
+npm run seed
+```
+
+Após alterar variáveis de ambiente na Vercel, gere um novo deployment para aplicá-las.
+
 Plataforma de preparação para o Exame Intelectual do concurso **EsFCEx** (Escola de Saúde e Formação Complementar do Exército), banca **VUNESP**, cargo **Informática**.
 
 Cruza o histórico de provas da banca para identificar padrões de cobrança por disciplina/assunto, gera um plano de estudos priorizado, monta simulados respeitando a proporção real de disciplinas da prova, e usa IA (Google Gemini) para importar provas em PDF, gerar explicações de questões e questões de treino extras.
@@ -93,4 +108,3 @@ data/reference_exams.json   # dados históricos de referência (seed)
 docker build -t esfcex-prep .
 docker run -p 3000:3000 -e GEMINI_API_KEY=xxxx esfcex-prep
 ```
-

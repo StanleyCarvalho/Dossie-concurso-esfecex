@@ -7,10 +7,11 @@ router.get('/login', (req, res) => {
   res.render('login', { error: null, mode: 'login' });
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res, next) => {
+  try {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const user = await db.one('SELECT * FROM users WHERE email = $1', [email]);
 
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).render('login', { error: 'E-mail ou senha invalidos.', mode: 'login' });
@@ -18,13 +19,16 @@ router.post('/login', (req, res) => {
 
   req.session.userId = user.id;
   res.redirect('/');
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.get('/cadastro', (req, res) => {
   res.render('login', { error: null, mode: 'register' });
 });
 
-router.post('/cadastro', (req, res) => {
+router.post('/cadastro', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   const name = String(req.body.name || '').trim();
@@ -38,9 +42,11 @@ router.post('/cadastro', (req, res) => {
 
   try {
     const passwordHash = bcrypt.hashSync(password, 12);
-    const info = db.prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
-      .run(email, passwordHash, name || null);
-    req.session.userId = info.lastInsertRowid;
+    const user = await db.one(
+      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id',
+      [email, passwordHash, name || null]
+    );
+    req.session.userId = user.id;
     res.redirect('/');
   } catch (e) {
     res.status(400).render('login', { error: 'Este e-mail ja esta cadastrado.', mode: 'register' });

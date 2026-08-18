@@ -13,9 +13,13 @@ const uploadDir = process.env.VERCEL
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } });
 
-router.get('/', (req, res) => {
-  const exams = db.prepare('SELECT * FROM exams WHERE user_id IS NULL OR user_id = ? ORDER BY ano DESC').all(req.session.userId);
+router.get('/', async (req, res, next) => {
+  try {
+  const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
   res.render('import', { exams, result: null });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post('/', upload.single('provaPdf'), async (req, res) => {
@@ -24,37 +28,24 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
     const rawText = await extractTextFromPdf(req.file.path);
     const questions = await parsePdfToQuestions(rawText, { ano, cargo, banca });
 
-    const insertExam = db.prepare(`
+    const exam = await db.one(`
       INSERT INTO exams (banca, orgao, cargo, ano, num_questoes, fonte, status, user_id)
-      VALUES (?, 'ESFCEx', ?, ?, ?, 'upload PDF + extração IA', 'completa', ?)
-    `);
-    const info = insertExam.run(banca || 'VUNESP', cargo || 'Informática', Number(ano), questions.length, req.session.userId);
-    const examId = info.lastInsertRowid;
-
-    const insertQuestion = db.prepare(`
-      INSERT INTO questions (exam_id, number, discipline, topic, statement, alt_a, alt_b, alt_c, alt_d, alt_e, correct_letter, style_notes, source)
-      VALUES (@exam_id, @number, @discipline, @topic, @statement, @alt_a, @alt_b, @alt_c, @alt_d, @alt_e, @correct_letter, @style_notes, 'import')
-    `);
+      VALUES ($1, 'ESFCEx', $2, $3, $4, 'upload PDF + extração IA', 'completa', $5)
+      RETURNING id
+    `, [banca || 'VUNESP', cargo || 'Informática', Number(ano), questions.length, req.session.userId]);
+    const examId = exam.id;
 
     const disciplineCounts = {};
     const disciplineTopics = {};
-    const tx = db.transaction(items => {
-      for (const q of items) {
+    await db.transaction(async client => {
+      for (const q of questions) {
         const discipline = q.discipline || 'Não classificado';
-        insertQuestion.run({
-          exam_id: examId,
-          number: q.number || null,
-          discipline,
-          topic: q.topic || null,
-          statement: q.statement || '',
-          alt_a: q.alt_a || null,
-          alt_b: q.alt_b || null,
-          alt_c: q.alt_c || null,
-          alt_d: q.alt_d || null,
-          alt_e: q.alt_e || null,
-          correct_letter: q.correct_letter || null,
-          style_notes: q.style_notes || null
-        });
+        await client.query(`
+          INSERT INTO questions (exam_id, number, discipline, topic, statement, alt_a, alt_b, alt_c, alt_d, alt_e, correct_letter, style_notes, source)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'import')
+        `, [examId, q.number || null, discipline, q.topic || null, q.statement || '', q.alt_a || null,
+          q.alt_b || null, q.alt_c || null, q.alt_d || null, q.alt_e || null,
+          q.correct_letter || null, q.style_notes || null]);
         disciplineCounts[discipline] = (disciplineCounts[discipline] || 0) + 1;
         if (q.topic) {
           disciplineTopics[discipline] = disciplineTopics[discipline] || {};
@@ -62,29 +53,28 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
         }
       }
     });
-    tx(questions);
-
-    const insertDisc = db.prepare(`
-      INSERT OR REPLACE INTO discipline_stats (exam_id, discipline, num_questions, topics)
-      VALUES (?, ?, ?, ?)
-    `);
     for (const [discipline, count] of Object.entries(disciplineCounts)) {
       const topics = Object.entries(disciplineTopics[discipline] || {})
         .sort((a, b) => b[1] - a[1])
         .map(([topic, topicCount]) => ({ topic, count: topicCount }));
-      insertDisc.run(examId, discipline, count, JSON.stringify(topics));
+      await db.query(`
+        INSERT INTO discipline_stats (exam_id, discipline, num_questions, topics)
+        VALUES ($1, $2, $3, $4::jsonb)
+        ON CONFLICT (exam_id, discipline)
+        DO UPDATE SET num_questions = EXCLUDED.num_questions, topics = EXCLUDED.topics
+      `, [examId, discipline, count, JSON.stringify(topics)]);
     }
 
     fs.unlinkSync(req.file.path);
 
-    const exams = db.prepare('SELECT * FROM exams WHERE user_id IS NULL OR user_id = ? ORDER BY ano DESC').all(req.session.userId);
+    const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
     res.render('import', {
       exams,
       result: { success: true, count: questions.length, examId }
     });
   } catch (e) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    const exams = db.prepare('SELECT * FROM exams WHERE user_id IS NULL OR user_id = ? ORDER BY ano DESC').all(req.session.userId);
+    const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
     res.render('import', { exams, result: { success: false, error: e.message } });
   }
 });

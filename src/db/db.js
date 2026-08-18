@@ -1,34 +1,44 @@
-const path = require('path');
-const fs = require('fs');
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 
-const DEFAULT_DB_PATH = process.env.VERCEL
-  ? path.join('/tmp', 'esfcex.db')
-  : path.join(__dirname, '..', '..', 'data', 'esfcex.db');
-const DB_PATH = process.env.DB_PATH || DEFAULT_DB_PATH;
-const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
-
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-function initSchema() {
-  const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
-  db.exec(schema);
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL não configurada. Informe a conexão PostgreSQL do Neon.');
 }
 
-initSchema();
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.DB_POOL_MAX) || 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+});
 
-function ensureColumn(table, column, definition) {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name);
-  if (!columns.includes(column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+async function query(text, params = [], client = pool) {
+  const result = await client.query(text, params);
+  return result.rows;
+}
+
+async function one(text, params = [], client = pool) {
+  const rows = await query(text, params, client);
+  return rows[0] || null;
+}
+
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
-ensureColumn('exams', 'user_id', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
-ensureColumn('simulados', 'user_id', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
+async function ping() {
+  await one('SELECT 1 AS ok');
+}
 
-module.exports = db;
+module.exports = { pool, query, one, transaction, ping };
