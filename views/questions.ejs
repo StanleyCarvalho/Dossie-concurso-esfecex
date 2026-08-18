@@ -19,8 +19,9 @@
   <div class="empty">Nenhuma questão importada ainda. Vá em <a href="/import">Importar provas</a> para começar.</div>
 <% } else { %>
   <% questions.forEach(q => { %>
-    <div class="question-card">
+    <div class="question-card" id="questao-<%= q.id %>">
       <div class="question-meta">
+        <% if (q.ano) { %><span class="tag mono"><%= q.ano %></span><% } %>
         <span class="tag gold"><%= t(q.discipline) %></span>
         <% if (q.topic) { %><span class="tag"><%= t(q.topic) %></span><% } %>
         <% if (q.number) { %><span class="tag mono">Q<%= q.number %></span><% } %>
@@ -32,6 +33,7 @@
         <% } }) %>
       </div>
       <% if (q.correct_letter) { %><p class="mono" style="font-size:.75rem; margin-top:8px;">Gabarito: <span style="color:var(--ok);"><%= q.correct_letter %></span></p><% } %>
+      <a href="#questao-<%= q.id %>" class="muted mono" style="font-size:.72rem;">link direto desta questão</a>
     </div>
   <% }) %>
 <% } %>

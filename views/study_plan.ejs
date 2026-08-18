@@ -6,9 +6,12 @@
   <p class="muted">Priorizacao por incidencia historica, recorrencia recente e desempenho em simulados.</p>
 </div>
 
+<% if (querySaved === 'plan') { %><div class="card" style="border-color:var(--ok); margin-bottom:18px;">✅ Plano gerado e salvo na sua conta.</div><% } %>
+<% if (querySaved === 'agenda') { %><div class="card" style="border-color:var(--ok); margin-bottom:18px;">✅ Dias e carga horária salvos na sua conta.</div><% } %>
+
 <form method="POST" action="/plano-estudos/gerar" style="margin-bottom:24px;">
-  <button class="btn" type="submit">(Re)gerar plano de estudos com IA</button>
-  <span class="muted" style="font-size:.8rem; margin-left:10px;">A matriz objetiva abaixo ja funciona com os dados importados.</span>
+  <button class="btn" type="submit">Gerar e salvar plano com IA</button>
+  <span class="muted" style="font-size:.8rem; margin-left:10px;">Usa provas importadas, relatório salvo, simulados e seu progresso.</span>
 </form>
 
 <div class="card planner-card" style="margin-bottom:18px;">
@@ -20,7 +23,7 @@
     <div class="planner-total mono"><%= Math.round(weeklySchedule.totalWeeklyMinutes / 60 * 10) / 10 %>h/semana</div>
   </div>
 
-  <form method="GET" action="/plano-estudos" class="availability-form">
+  <form method="POST" action="/plano-estudos/agenda/salvar" class="availability-form">
     <div class="day-picker">
       <% Object.entries(dayLabels).forEach(([key, label]) => { %>
         <label class="day-chip">
@@ -32,7 +35,7 @@
     <label class="hours-field">Horas por dia
       <input type="number" name="hoursPerDay" min="0.5" max="12" step="0.5" value="<%= hoursPerDay %>">
     </label>
-    <button class="btn" type="submit">Gerar agenda</button>
+    <button class="btn" type="submit">Salvar agenda</button>
   </form>
 
   <% if (weeklySchedule.blocks.length === 0) { %>
@@ -83,7 +86,11 @@
             <div class="muted" style="font-size:.82rem;">Foque em: <%= target.focus.map(item => t(item)).join('; ') %></div>
           </td>
           <td class="muted" style="font-size:.82rem; min-width:220px;">
-            <% if (target.refs.length) { %><%= target.refs.join(', ') %><br><% } %>
+            <% if (target.questionLinks.length) { %>
+              <% target.questionLinks.forEach(ref => { %>
+                <% if (ref.url) { %><a class="tag" href="<%= ref.url %>"><%= ref.label %></a><% } %>
+              <% }) %><br>
+            <% } %>
             <a href="/questoes?discipline=<%= encodeURIComponent(target.discipline) %>">questoes reais da disciplina</a>
             <form method="POST" action="/progresso" class="progress-form">
               <input type="hidden" name="discipline" value="<%= target.discipline %>">
@@ -104,6 +111,7 @@
   <div class="empty">Nenhum plano com IA gerado ainda. Clique no botao acima se quiser notas explicativas por assunto.</div>
 <% } else { %>
   <h3 style="margin:20px 0 12px;">Notas de estudo geradas por IA</h3>
+  <p class="muted mono" style="font-size:.75rem;">Plano salvo em <%= new Date(items[0].generated_at).toLocaleString('pt-BR') %></p>
   <% items.forEach(it => { %>
     <div class="card" style="margin-bottom:12px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">

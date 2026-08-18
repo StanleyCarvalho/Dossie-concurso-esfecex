@@ -80,7 +80,9 @@
           </td>
           <td class="muted" style="font-size:.82rem;">
             <% if (target.refs.length) { %>
-              <%= target.refs.join(', ') %><br>
+              <% target.questionLinks.forEach(ref => { %>
+                <% if (ref.url) { %><a class="tag" href="<%= ref.url %>"><%= ref.label %></a><% } %>
+              <% }) %><br>
             <% } %>
             <a href="/questoes?discipline=<%= encodeURIComponent(target.discipline) %>">abrir questoes da disciplina</a>
             <div class="progress-mini"><span style="width:<%= target.progress %>%"></span></div>

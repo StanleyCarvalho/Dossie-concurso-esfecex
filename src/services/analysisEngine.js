@@ -246,25 +246,27 @@ function normalizeTopic(topic, discipline) {
   return value || `Revisão geral de ${fixMojibake(discipline)}`;
 }
 
-async function getExamYears() {
+async function getExamYears(userId = null) {
   const rows = await db.query(`
     SELECT DISTINCT e.ano
     FROM exams e
     JOIN discipline_stats ds ON ds.exam_id = e.id
     WHERE e.num_questoes > 0
+      AND ($1::bigint IS NULL OR e.user_id IS NULL OR e.user_id = $1)
     ORDER BY e.ano
-  `);
+  `, [userId]);
   return rows.map(row => row.ano);
 }
 
-async function getDisciplineWeights(totalQuestions = 60) {
+async function getDisciplineWeights(totalQuestions = 60, userId = null) {
   const rows = await db.query(`
     SELECT ds.discipline, e.ano, ds.num_questions
     FROM discipline_stats ds
     JOIN exams e ON e.id = ds.exam_id
     WHERE e.num_questoes > 0 AND ds.num_questions > 0
+      AND ($1::bigint IS NULL OR e.user_id IS NULL OR e.user_id = $1)
     ORDER BY e.ano
-  `);
+  `, [userId]);
 
   const byDiscipline = new Map();
   const maxYear = rows.reduce((max, row) => Math.max(max, row.ano || 0), 0);
@@ -296,10 +298,10 @@ async function getDisciplineWeights(totalQuestions = 60) {
     .sort((a, b) => b.target - a.target);
 }
 
-async function getTopicEvidence() {
+async function getTopicEvidence(userId = null) {
   const evidence = new Map();
 
-  const add = ({ discipline, topic, ano, questionNumber, weight = 1 }) => {
+  const add = ({ discipline, topic, ano, questionNumber, questionId, weight = 1 }) => {
     const cleanDiscipline = canonicalDiscipline(discipline);
     const key = `${cleanDiscipline}||${normalizeTopic(topic, cleanDiscipline)}`;
     const current = evidence.get(key) || {
@@ -310,22 +312,24 @@ async function getTopicEvidence() {
       weight: 0
     };
     if (ano) current.years.add(ano);
-    if (questionNumber) current.questionRefs.push({ ano, number: questionNumber });
+    if (questionNumber) current.questionRefs.push({ id: questionId, ano, number: questionNumber });
     current.weight += weight;
     evidence.set(key, current);
   };
 
   const questionRows = await db.query(`
-    SELECT q.discipline, q.topic, q.number, e.ano
+    SELECT q.id, q.discipline, q.topic, q.number, e.ano
     FROM questions q
     LEFT JOIN exams e ON e.id = q.exam_id
     WHERE q.source != 'ai_practice' AND e.num_questoes > 0
-  `);
+      AND ($1::bigint IS NULL OR e.user_id IS NULL OR e.user_id = $1)
+  `, [userId]);
   questionRows.forEach(row => add({
     discipline: row.discipline,
     topic: row.topic,
     ano: row.ano,
     questionNumber: row.number,
+    questionId: row.id,
     weight: 2
   }));
 
@@ -334,7 +338,8 @@ async function getTopicEvidence() {
     FROM discipline_stats ds
     JOIN exams e ON e.id = ds.exam_id
     WHERE e.num_questoes > 0
-  `);
+      AND ($1::bigint IS NULL OR e.user_id IS NULL OR e.user_id = $1)
+  `, [userId]);
   statisticRows.forEach(row => {
     for (const topic of parseTopics(row.topics)) {
       add({ discipline: row.discipline, topic, ano: row.ano, weight: 1 });
@@ -348,12 +353,12 @@ async function getTopicEvidence() {
   }));
 }
 
-async function getStudyTargets(limit = 40) {
-  const years = await getExamYears();
+async function getStudyTargets(limit = 40, userId = null) {
+  const years = await getExamYears(userId);
   const latestYear = years[years.length - 1] || 0;
-  const disciplineWeights = new Map((await getDisciplineWeights(60)).map(item => [canonicalDiscipline(item.discipline), item]));
+  const disciplineWeights = new Map((await getDisciplineWeights(60, userId)).map(item => [canonicalDiscipline(item.discipline), item]));
 
-  return (await getTopicEvidence())
+  return (await getTopicEvidence(userId))
     .map(item => {
       const cleanDiscipline = canonicalDiscipline(item.discipline);
       const discipline = disciplineWeights.get(cleanDiscipline);
@@ -375,6 +380,11 @@ async function getStudyTargets(limit = 40) {
         + (hasRealQuestions * 10)
       ));
       const refs = item.questionRefs.slice(-5).map(ref => `Ano ${ref.ano || '?'} Q${ref.number || '?'}`);
+      const questionLinks = item.questionRefs.slice(-5).map(ref => ({
+        ...ref,
+        label: `Ano ${ref.ano || '?'} Q${ref.number || '?'}`,
+        url: ref.id ? `/questoes?question=${ref.id}#questao-${ref.id}` : null
+      }));
 
       return {
         ...item,
@@ -388,6 +398,7 @@ async function getStudyTargets(limit = 40) {
         focus: [...new Set([cleanTopic, ...map.focus])].filter(Boolean).slice(0, 6),
         checklist: focusedResource.checklist,
         refs,
+        questionLinks,
         progress: 0
       };
     })
@@ -453,11 +464,11 @@ async function getProjectedExamLegacy(totalQuestions = 60) {
   return { totalQuestions, distribution: targets, slots };
 }
 
-async function getProjectedExam(totalQuestions = 60) {
-  const years = await getExamYears();
+async function getProjectedExam(totalQuestions = 60, userId = null) {
+  const years = await getExamYears(userId);
   const baseYear = years[years.length - 1] || null;
-  const targets = normalizeTargets(await getDisciplineWeights(totalQuestions), totalQuestions);
-  const topicsByDiscipline = (await getStudyTargets(200)).reduce((acc, item) => {
+  const targets = normalizeTargets(await getDisciplineWeights(totalQuestions, userId), totalQuestions);
+  const topicsByDiscipline = (await getStudyTargets(200, userId)).reduce((acc, item) => {
     acc[item.discipline] = acc[item.discipline] || [];
     acc[item.discipline].push(item);
     return acc;
@@ -492,6 +503,7 @@ async function getProjectedExam(totalQuestions = 60) {
         confidence: fromBaseYear ? 'alta' : topic.confidence,
         score: fromBaseYear ? Math.max(topic.score || 0, 82) : (topic.score || 30),
         refs: topic.refs || [],
+        questionLinks: topic.questionLinks || [],
         source: focusedResource.source,
         sourceUrl: focusedResource.sourceUrl,
         directLesson: focusedResource.direct,

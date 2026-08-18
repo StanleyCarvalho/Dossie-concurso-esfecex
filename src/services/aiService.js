@@ -349,7 +349,7 @@ Gere o relatório de padrões conforme instruído.`;
  * Gera um plano de estudos priorizado a partir dos pesos históricos
  * e do desempenho do usuário em simulados.
  */
-async function generateStudyPlan({ weights, performance }) {
+async function generateStudyPlan({ weights, performance, report = null }) {
   const system = `Você é um orientador de estudos para concursos militares (ESFCEx, cargo Informática).
 Com base no peso histórico de cada disciplina/assunto na banca VUNESP e no desempenho do candidato em simulados, gere um plano de estudos priorizado.
 Responda APENAS com um array JSON, sem texto fora do JSON, no formato:
@@ -362,7 +362,8 @@ Responda APENAS com um array JSON, sem texto fora do JSON, no formato:
     "study_notes": "<resumo de estudo objetivo, 3-6 frases, direto ao ponto, focado no que a banca cobra>"
   }
 ]
-Ordene do maior para o menor priority_score. Gere entre 10 e 20 itens cobrindo as principais disciplinas técnicas de Informática do edital.`;
+Use somente combinações de disciplina e assunto presentes na matriz objetiva fornecida. Não invente assuntos fora dela.
+Ordene do maior para o menor priority_score. Gere entre 10 e 20 itens cobrindo as prioridades reais da matriz.`;
 
   const prompt = `Pesos históricos/estimados por disciplina:
 ${JSON.stringify(weights, null, 2)}
@@ -370,7 +371,10 @@ ${JSON.stringify(weights, null, 2)}
 Desempenho do candidato em simulados (pode estar vazio se ainda não fez nenhum):
 ${JSON.stringify(performance, null, 2)}
 
-Gere o plano de estudos.`;
+Último relatório de padrões salvo (pode estar vazio):
+${report ? JSON.stringify({ content: report.content_md, weights: report.weights_json }, null, 2) : 'Nenhum relatório salvo.'}
+
+Gere o plano priorizando: incidência histórica, presença nos anos recentes, peso previsto no relatório, erros em simulados e assuntos ainda não concluídos pelo candidato.`;
 
   const text = await askGemini({ system, prompt, maxTokens: 8000, json: true });
   try {
