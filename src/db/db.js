@@ -2,7 +2,10 @@ const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'esfcex.db');
+const DEFAULT_DB_PATH = process.env.VERCEL
+  ? path.join('/tmp', 'esfcex.db')
+  : path.join(__dirname, '..', '..', 'data', 'esfcex.db');
+const DB_PATH = process.env.DB_PATH || DEFAULT_DB_PATH;
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
