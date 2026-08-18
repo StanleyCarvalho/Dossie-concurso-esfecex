@@ -18,12 +18,23 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  store: new SQLiteStore({ db: 'sessions.sqlite', dir: path.join(__dirname, 'data') }),
+  store: new SQLiteStore({
+    db: 'sessions.sqlite',
+    dir: process.env.VERCEL ? '/tmp' : path.join(__dirname, 'data')
+  }),
   secret: process.env.SESSION_SECRET || 'troque-este-segredo-no-env',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax' }
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production'
+  }
 }));
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 // helper de markdown disponível em todas as views + define `active`/`title` default
 app.use((req, res, next) => {
@@ -64,14 +75,18 @@ app.use((req, res) => {
   res.status(404).render('error', { message: 'Página não encontrada.' });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`ESFCEx Informática Prep rodando em http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  const server = app.listen(PORT, () => {
+    console.log(`ESFCEx Informática Prep rodando em http://localhost:${PORT}`);
+  });
 
-server.on('error', error => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`A porta ${PORT} ja esta em uso. Feche o servidor antigo ou altere PORT no arquivo .env.`);
-    process.exit(1);
-  }
-  throw error;
-});
+  server.on('error', error => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`A porta ${PORT} ja esta em uso. Feche o servidor antigo ou altere PORT no arquivo .env.`);
+      process.exit(1);
+    }
+    throw error;
+  });
+}
+
+module.exports = app;
