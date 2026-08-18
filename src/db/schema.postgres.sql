@@ -74,14 +74,26 @@ CREATE TABLE IF NOT EXISTS study_plan (
   rationale TEXT,
   status TEXT DEFAULT 'pendente',
   study_notes TEXT,
-  generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS pattern_reports (
   id BIGSERIAL PRIMARY KEY,
   content_md TEXT NOT NULL,
   weights_json JSONB,
-  generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE
+);
+
+ALTER TABLE study_plan ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE pattern_reports ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id) ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS study_plan_preferences (
+  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  days JSONB NOT NULL DEFAULT '["mon", "wed", "fri"]'::jsonb,
+  hours_per_day DOUBLE PRECISION NOT NULL DEFAULT 2,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS study_progress (
@@ -100,3 +112,5 @@ CREATE INDEX IF NOT EXISTS idx_questions_exam ON questions(exam_id);
 CREATE INDEX IF NOT EXISTS idx_discipline_stats_exam ON discipline_stats(exam_id);
 CREATE INDEX IF NOT EXISTS idx_simulados_user_started ON simulados(user_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_study_progress_user ON study_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_study_plan_user_priority ON study_plan(user_id, priority_score DESC);
+CREATE INDEX IF NOT EXISTS idx_pattern_reports_user_generated ON pattern_reports(user_id, generated_at DESC);
