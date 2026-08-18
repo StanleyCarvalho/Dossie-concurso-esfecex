@@ -64,7 +64,12 @@
       </div>
 
       <% if (slot.refs && slot.refs.length) { %>
-        <p class="muted mono" style="font-size:.75rem;">Evidencia historica: <%= slot.refs.join(', ') %></p>
+        <div class="historical-evidence">
+          <span class="muted mono" style="font-size:.75rem;">Evidencia historica:</span>
+          <% (slot.questionLinks || []).forEach(ref => { %>
+            <% if (ref.url) { %><a class="tag" href="<%= ref.url %>"><%= ref.label %> · ver enunciado e respostas</a><% } %>
+          <% }) %>
+        </div>
       <% } %>
 
       <div class="progress-mini"><span style="width:<%= slot.progress %>%"></span></div>
