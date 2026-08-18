@@ -6,12 +6,20 @@ const { getBlueprint } = require('../services/simuladoEngine');
 const { getStudyTargets, getProjectedExam, attachProgress } = require('../services/analysisEngine');
 const { buildWeeklySchedule, DAY_LABELS } = require('../services/scheduleEngine');
 
+function planKey(discipline, topic) {
+  return `${String(discipline || '').trim().toLowerCase()}||${String(topic || '').trim().toLowerCase()}`;
+}
+
 router.get('/', async (req, res, next) => {
   try {
   const totalExams = (await db.one('SELECT COUNT(*)::int c FROM exams WHERE user_id IS NULL OR user_id = $1', [req.session.userId])).c;
-  const totalQuestions = (await db.one("SELECT COUNT(*)::int c FROM questions WHERE source != 'ai_practice'")).c;
+  const totalQuestions = (await db.one(`
+    SELECT COUNT(*)::int c FROM questions q
+    JOIN exams e ON e.id = q.exam_id
+    WHERE q.source != 'ai_practice' AND (e.user_id IS NULL OR e.user_id = $1)
+  `, [req.session.userId])).c;
   const totalSimulados = (await db.one('SELECT COUNT(*)::int c FROM simulados WHERE user_id IS NULL OR user_id = $1', [req.session.userId])).c;
-  const lastReport = await db.one('SELECT * FROM pattern_reports ORDER BY generated_at DESC LIMIT 1');
+  const lastReport = await db.one('SELECT * FROM pattern_reports WHERE user_id = $1 ORDER BY generated_at DESC LIMIT 1', [req.session.userId]);
   const blueprint = await getBlueprint(50);
 
   const perfRows = await db.query(`
@@ -36,18 +44,25 @@ router.get('/', async (req, res, next) => {
 
 router.get('/questoes', async (req, res, next) => {
   try {
-  const { discipline } = req.query;
+  const { discipline, question } = req.query;
   let rows;
-  if (discipline) {
+  if (question && /^\d+$/.test(String(question))) {
     rows = await db.query(`
-      SELECT q.* FROM questions q
+      SELECT q.*, e.ano FROM questions q
+      JOIN exams e ON e.id = q.exam_id
+      WHERE q.id = $1 AND q.source != 'ai_practice' AND (e.user_id IS NULL OR e.user_id = $2)
+      LIMIT 1
+    `, [question, req.session.userId]);
+  } else if (discipline) {
+    rows = await db.query(`
+      SELECT q.*, e.ano FROM questions q
       LEFT JOIN exams e ON e.id = q.exam_id
       WHERE q.discipline = $1 AND q.source != 'ai_practice' AND (e.user_id IS NULL OR e.user_id = $2)
       ORDER BY q.id DESC LIMIT 200
     `, [discipline, req.session.userId]);
   } else {
     rows = await db.query(`
-      SELECT q.* FROM questions q
+      SELECT q.*, e.ano FROM questions q
       LEFT JOIN exams e ON e.id = q.exam_id
       WHERE q.source != 'ai_practice' AND (e.user_id IS NULL OR e.user_id = $1)
       ORDER BY q.id DESC LIMIT 200
@@ -66,9 +81,9 @@ router.get('/questoes', async (req, res, next) => {
 });
 
 router.get('/analise', async (req, res) => {
-  const lastReport = await db.one('SELECT * FROM pattern_reports ORDER BY generated_at DESC LIMIT 1');
-  const studyTargets = await attachProgress(await getStudyTargets(30), req.session.userId);
-  const projectedExam = await getProjectedExam(60);
+  const lastReport = await db.one('SELECT * FROM pattern_reports WHERE user_id = $1 ORDER BY generated_at DESC LIMIT 1', [req.session.userId]);
+  const studyTargets = await attachProgress(await getStudyTargets(30, req.session.userId), req.session.userId);
+  const projectedExam = await getProjectedExam(60, req.session.userId);
   res.render('analysis', {
     report: lastReport,
     studyTargets,
@@ -77,14 +92,14 @@ router.get('/analise', async (req, res) => {
 });
 
 router.get('/proxima-prova', async (req, res) => {
-  const projectedExam = await getProjectedExam(60);
+  const projectedExam = await getProjectedExam(60, req.session.userId);
   projectedExam.slots = await attachProgress(projectedExam.slots, req.session.userId);
   res.render('next_exam', { projectedExam });
 });
 
 router.post('/analise/gerar', async (req, res) => {
   try {
-    const exams = await db.query('SELECT * FROM exams ORDER BY ano');
+    const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano', [req.session.userId]);
     const stats = [];
     for (const e of exams) {
       const disciplines = (await db.query('SELECT discipline, num_questions, topics FROM discipline_stats WHERE exam_id = $1', [e.id]))
@@ -94,7 +109,7 @@ router.post('/analise/gerar', async (req, res) => {
 
     const { content_md, weights } = await generatePatternReport(stats);
 
-    await db.query('INSERT INTO pattern_reports (content_md, weights_json) VALUES ($1, $2::jsonb)', [content_md, JSON.stringify(weights)]);
+    await db.query('INSERT INTO pattern_reports (content_md, weights_json, user_id) VALUES ($1, $2::jsonb, $3)', [content_md, JSON.stringify(weights), req.session.userId]);
 
     res.redirect('/analise');
   } catch (e) {
@@ -103,12 +118,11 @@ router.post('/analise/gerar', async (req, res) => {
 });
 
 router.get('/plano-estudos', async (req, res) => {
-  const items = await db.query('SELECT * FROM study_plan ORDER BY priority_score DESC');
-  const selectedDays = Array.isArray(req.query.days)
-    ? req.query.days
-    : (req.query.days ? [req.query.days] : ['mon', 'wed', 'fri']);
-  const hoursPerDay = Number(req.query.hoursPerDay) || 2;
-  const studyTargets = await attachProgress(await getStudyTargets(30), req.session.userId);
+  const items = await db.query('SELECT * FROM study_plan WHERE user_id = $1 ORDER BY priority_score DESC', [req.session.userId]);
+  const preferences = await db.one('SELECT days, hours_per_day FROM study_plan_preferences WHERE user_id = $1', [req.session.userId]);
+  const selectedDays = preferences && Array.isArray(preferences.days) ? preferences.days : ['mon', 'wed', 'fri'];
+  const hoursPerDay = preferences ? Number(preferences.hours_per_day) : 2;
+  const studyTargets = await attachProgress(await getStudyTargets(30, req.session.userId), req.session.userId);
   const weeklySchedule = buildWeeklySchedule({ targets: studyTargets, days: selectedDays, hoursPerDay });
 
   res.render('study_plan', {
@@ -117,8 +131,24 @@ router.get('/plano-estudos', async (req, res) => {
     weeklySchedule,
     dayLabels: DAY_LABELS,
     selectedDays,
-    hoursPerDay
+    hoursPerDay,
+    querySaved: req.query.saved || ''
   });
+});
+
+router.post('/plano-estudos/agenda/salvar', async (req, res) => {
+  const requestedDays = Array.isArray(req.body.days) ? req.body.days : (req.body.days ? [req.body.days] : []);
+  const selectedDays = requestedDays.filter(day => DAY_LABELS[day]);
+  const hoursPerDay = Math.max(0.5, Math.min(12, Number(req.body.hoursPerDay) || 2));
+
+  await db.query(`
+    INSERT INTO study_plan_preferences (user_id, days, hours_per_day, updated_at)
+    VALUES ($1, $2::jsonb, $3, CURRENT_TIMESTAMP)
+    ON CONFLICT (user_id)
+    DO UPDATE SET days = excluded.days, hours_per_day = excluded.hours_per_day, updated_at = CURRENT_TIMESTAMP
+  `, [req.session.userId, JSON.stringify(selectedDays), hoursPerDay]);
+
+  res.redirect('/plano-estudos?saved=agenda');
 });
 
 router.post('/progresso', async (req, res) => {
@@ -141,31 +171,45 @@ router.post('/progresso', async (req, res) => {
 
 router.post('/plano-estudos/gerar', async (req, res) => {
   try {
-    const weights = await getStudyTargets(30);
+    const weights = await attachProgress(await getStudyTargets(30, req.session.userId), req.session.userId);
+    const report = await db.one('SELECT content_md, weights_json, generated_at FROM pattern_reports WHERE user_id = $1 ORDER BY generated_at DESC LIMIT 1', [req.session.userId]);
 
     const perfRows = await db.query(`
       SELECT q.discipline,
              COUNT(*)::int as total,
              COALESCE(SUM(sq.correct), 0)::int as acertos
       FROM simulado_questions sq
+      JOIN simulados s ON s.id = sq.simulado_id
       JOIN questions q ON q.id = sq.question_id
-      WHERE sq.answered_at IS NOT NULL
+      WHERE sq.answered_at IS NOT NULL AND (s.user_id IS NULL OR s.user_id = $1)
       GROUP BY q.discipline
-    `);
+    `, [req.session.userId]);
 
-    const plan = await generateStudyPlan({ weights, performance: perfRows });
+    const aiPlan = await generateStudyPlan({ weights, performance: perfRows, report });
+    const aiByTarget = new Map(aiPlan.map(item => [planKey(item.discipline, item.topic), item]));
+    const plan = weights.slice(0, 20).map(target => {
+      const aiItem = aiByTarget.get(planKey(target.discipline, target.topic));
+      const adjustedPriority = Math.max(1, Math.round(target.score * (1 - ((target.progress || 0) / 200))));
+      return {
+        discipline: target.discipline,
+        topic: target.topic,
+        priority_score: adjustedPriority,
+        rationale: aiItem?.rationale || `Incidência nos anos ${target.years.join(', ') || 'analisados'}, score histórico ${target.score} e progresso atual ${target.progress || 0}%.`,
+        study_notes: aiItem?.study_notes || target.checklist.join(' ')
+      };
+    }).sort((a, b) => b.priority_score - a.priority_score);
 
     await db.transaction(async client => {
-      await client.query('DELETE FROM study_plan');
+      await client.query('DELETE FROM study_plan WHERE user_id = $1', [req.session.userId]);
       for (const item of plan) {
         await client.query(`
-          INSERT INTO study_plan (discipline, topic, priority_score, rationale, study_notes)
-          VALUES ($1, $2, $3, $4, $5)
-        `, [item.discipline, item.topic, item.priority_score, item.rationale, item.study_notes]);
+          INSERT INTO study_plan (discipline, topic, priority_score, rationale, study_notes, user_id)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [item.discipline, item.topic, item.priority_score, item.rationale, item.study_notes, req.session.userId]);
       }
     });
 
-    res.redirect('/plano-estudos');
+    res.redirect('/plano-estudos?saved=plan');
   } catch (e) {
     res.status(500).render('error', { message: e.message });
   }
