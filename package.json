@@ -10,7 +10,7 @@
     "seed": "node src/db/seed.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "22.x"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
