@@ -166,6 +166,21 @@ function mergeQuestionBatches(batches) {
   });
 }
 
+function normalizeExpectedQuestions(questions, expectedQuestions) {
+  const expected = Number(expectedQuestions);
+  if (!Number.isInteger(expected) || expected < 1) return mergeQuestionBatches([questions]);
+
+  return mergeQuestionBatches([questions])
+    .map(question => ({ ...question, number: Number(question.number) }))
+    .filter(question => Number.isInteger(question.number) && question.number >= 1 && question.number <= expected);
+}
+
+function getMissingQuestionNumbers(questions, expectedQuestions) {
+  const found = new Set(questions.map(question => Number(question.number)));
+  return Array.from({ length: expectedQuestions }, (_, index) => index + 1)
+    .filter(number => !found.has(number));
+}
+
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -216,6 +231,18 @@ Se não conseguir identificar algum campo com segurança, use null. Não invente
     chunks: chunks.length
   }));
 
+  const parseResponse = async (prompt, maxTokens = 16000) => {
+    const text = await askGemini({ system, prompt, maxTokens, json: true });
+    let questions;
+    try {
+      questions = extractJson(text);
+    } catch (error) {
+      questions = await repairJsonResponse(text);
+    }
+    if (!Array.isArray(questions)) throw new Error('O Gemini não retornou uma lista de questões.');
+    return questions;
+  };
+
   const batches = await mapWithConcurrency(chunks, PDF_CHUNK_CONCURRENCY, async (chunk, index) => {
     const prompt = `Metadados da prova: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}.
 
@@ -229,16 +256,7 @@ ${chunk}
 
 Devolva todas as questões completas identificadas no formato JSON especificado.`;
 
-    const text = await askGemini({ system, prompt, maxTokens: 16000, json: true });
-    let questions;
-    try {
-      questions = extractJson(text);
-    } catch (error) {
-      questions = await repairJsonResponse(text);
-    }
-    if (!Array.isArray(questions)) {
-      throw new Error(`O Gemini não retornou uma lista de questões no trecho ${index + 1}.`);
-    }
+    const questions = await parseResponse(prompt);
     console.log(JSON.stringify({
       level: 'info',
       message: 'pdf_ai_chunk_completed',
@@ -249,7 +267,43 @@ Devolva todas as questões completas identificadas no formato JSON especificado.
     return questions;
   });
 
-  const questions = mergeQuestionBatches(batches);
+  const expectedQuestions = Number(meta.expectedQuestions);
+  let questions = normalizeExpectedQuestions(mergeQuestionBatches(batches), expectedQuestions);
+
+  if (Number.isInteger(expectedQuestions) && expectedQuestions > 0) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const missing = getMissingQuestionNumbers(questions, expectedQuestions);
+      if (!missing.length) break;
+
+      console.log(JSON.stringify({
+        level: 'info',
+        message: 'pdf_ai_missing_questions_recovery_started',
+        attempt,
+        missing
+      }));
+
+      const recoveryPrompt = `Metadados da prova: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}.
+
+A prova deve conter exatamente ${expectedQuestions} questões numeradas de 1 a ${expectedQuestions}.
+Já foram encontradas as demais questões. Extraia SOMENTE estas questões ausentes: ${missing.join(', ')}.
+Não renumere questões e não inclua instruções, exemplos, textos auxiliares ou questões com outros números.
+
+Texto integral extraído do PDF:
+"""
+${String(rawText || '').slice(0, 140000)}
+"""
+
+Devolva um array JSON apenas com as questões solicitadas e todos os campos do formato especificado.`;
+
+      const recovered = await parseResponse(recoveryPrompt, Math.min(16000, Math.max(4000, missing.length * 1800)));
+      questions = normalizeExpectedQuestions([...questions, ...recovered], expectedQuestions);
+    }
+
+    const missing = getMissingQuestionNumbers(questions, expectedQuestions);
+    if (missing.length || questions.length !== expectedQuestions) {
+      throw new Error(`Importação incompleta: foram identificadas ${questions.length} de ${expectedQuestions} questões. Números ausentes: ${missing.join(', ') || 'nenhum'}. Nenhum dado foi gravado; verifique se o PDF possui texto selecionável e tente novamente.`);
+    }
+  }
   console.log(JSON.stringify({
     level: 'info',
     message: 'pdf_ai_extraction_completed',
@@ -373,6 +427,8 @@ module.exports = {
   parsePdfToQuestions,
   splitPdfText,
   mergeQuestionBatches,
+  normalizeExpectedQuestions,
+  getMissingQuestionNumbers,
   generatePatternReport,
   generateStudyPlan,
   generatePracticeQuestions,
