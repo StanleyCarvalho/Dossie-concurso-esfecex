@@ -24,9 +24,22 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', upload.single('provaPdf'), async (req, res) => {
   const { ano, cargo, banca } = req.body;
+  const startedAt = Date.now();
   try {
+    if (!req.file) throw new Error('Selecione um arquivo PDF para importar.');
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'pdf_import_started',
+      fileSize: req.file.size,
+      ano: Number(ano),
+      userId: req.session.userId
+    }));
     const rawText = await extractTextFromPdf(req.file.path);
     const questions = await parsePdfToQuestions(rawText, { ano, cargo, banca });
+
+    if (!questions.length) {
+      throw new Error('Nenhuma questão foi identificada no PDF.');
+    }
 
     const exam = await db.one(`
       INSERT INTO exams (banca, orgao, cargo, ano, num_questoes, fonte, status, user_id)
@@ -67,6 +80,14 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
 
     fs.unlinkSync(req.file.path);
 
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'pdf_import_completed',
+      examId,
+      questions: questions.length,
+      durationMs: Date.now() - startedAt
+    }));
+
     const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
     res.render('import', {
       exams,
@@ -74,6 +95,12 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
     });
   } catch (e) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    console.error(JSON.stringify({
+      level: 'error',
+      message: 'pdf_import_failed',
+      error: e.message,
+      durationMs: Date.now() - startedAt
+    }));
     const exams = await db.query('SELECT * FROM exams WHERE user_id IS NULL OR user_id = $1 ORDER BY ano DESC', [req.session.userId]);
     res.render('import', { exams, result: { success: false, error: e.message } });
   }

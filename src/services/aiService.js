@@ -9,6 +9,9 @@ const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.5-flash
   .map(model => model.trim())
   .filter(Boolean);
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const PDF_CHUNK_SIZE = Number(process.env.PDF_AI_CHUNK_SIZE) || 18000;
+const PDF_CHUNK_OVERLAP = Number(process.env.PDF_AI_CHUNK_OVERLAP) || 1800;
+const PDF_CHUNK_CONCURRENCY = Number(process.env.PDF_AI_CHUNK_CONCURRENCY) || 3;
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -112,6 +115,71 @@ ${text}`;
   return extractJson(repaired);
 }
 
+function splitPdfText(rawText, chunkSize = PDF_CHUNK_SIZE, overlap = PDF_CHUNK_OVERLAP) {
+  const text = String(rawText || '').replace(/\r\n/g, '\n').trim();
+  if (!text) return [];
+  if (text.length <= chunkSize) return [text];
+
+  const chunks = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + chunkSize, text.length);
+    if (end < text.length) {
+      const boundary = text.lastIndexOf('\n', end);
+      if (boundary > start + Math.floor(chunkSize * 0.7)) end = boundary;
+    }
+    chunks.push(text.slice(start, end));
+    if (end >= text.length) break;
+    start = Math.max(start + 1, end - overlap);
+  }
+  return chunks;
+}
+
+function questionKey(question) {
+  const number = Number(question?.number);
+  if (Number.isFinite(number) && number > 0) return `number:${number}`;
+  const statement = String(question?.statement || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  return statement ? `statement:${statement}` : null;
+}
+
+function mergeQuestionBatches(batches) {
+  const byKey = new Map();
+  let anonymousIndex = 0;
+  for (const question of batches.flat()) {
+    if (!question || typeof question !== 'object') continue;
+    const key = questionKey(question) || `anonymous:${anonymousIndex++}`;
+    const current = byKey.get(key);
+    if (!current || JSON.stringify(question).length > JSON.stringify(current).length) {
+      byKey.set(key, question);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const aNumber = Number(a.number);
+    const bNumber = Number(b.number);
+    if (!Number.isFinite(aNumber)) return 1;
+    if (!Number.isFinite(bNumber)) return -1;
+    return aNumber - bNumber;
+  });
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, items.length));
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
 /**
  * Recebe o texto bruto extraído de um PDF de prova (+ gabarito, se disponível)
  * e devolve um array estruturado de questões.
@@ -136,21 +204,59 @@ Cada item deve ter exatamente estes campos:
 }
 Se não conseguir identificar algum campo com segurança, use null. Não invente conteúdo que não está no texto.`;
 
-  const prompt = `Metadados da prova: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}.
+  const chunks = splitPdfText(rawText);
+  if (!chunks.length) {
+    throw new Error('O PDF não contém texto extraível. Use um PDF com texto selecionável ou aplique OCR antes de importar.');
+  }
+
+  console.log(JSON.stringify({
+    level: 'info',
+    message: 'pdf_ai_extraction_started',
+    textLength: String(rawText || '').length,
+    chunks: chunks.length
+  }));
+
+  const batches = await mapWithConcurrency(chunks, PDF_CHUNK_CONCURRENCY, async (chunk, index) => {
+    const prompt = `Metadados da prova: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}.
+
+Este é o trecho ${index + 1} de ${chunks.length} do PDF. Extraia TODAS as questões completas visíveis neste trecho.
+O texto possui sobreposição com os trechos vizinhos; não invente partes ausentes. Questões repetidas serão eliminadas depois.
 
 Texto extraído do PDF:
 """
-${rawText.slice(0, 100000)}
+${chunk}
 """
 
-Extraia todas as questões que conseguir identificar no formato JSON especificado.`;
+Devolva todas as questões completas identificadas no formato JSON especificado.`;
 
-  const text = await askGemini({ system, prompt, maxTokens: 30000, json: true });
-  try {
-    return extractJson(text);
-  } catch (e) {
-    return repairJsonResponse(text);
-  }
+    const text = await askGemini({ system, prompt, maxTokens: 16000, json: true });
+    let questions;
+    try {
+      questions = extractJson(text);
+    } catch (error) {
+      questions = await repairJsonResponse(text);
+    }
+    if (!Array.isArray(questions)) {
+      throw new Error(`O Gemini não retornou uma lista de questões no trecho ${index + 1}.`);
+    }
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'pdf_ai_chunk_completed',
+      chunk: index + 1,
+      totalChunks: chunks.length,
+      questions: questions.length
+    }));
+    return questions;
+  });
+
+  const questions = mergeQuestionBatches(batches);
+  console.log(JSON.stringify({
+    level: 'info',
+    message: 'pdf_ai_extraction_completed',
+    chunks: chunks.length,
+    questions: questions.length
+  }));
+  return questions;
 }
 
 /**
@@ -265,6 +371,8 @@ Explique por que a alternativa correta está certa e, brevemente, por que as pri
 
 module.exports = {
   parsePdfToQuestions,
+  splitPdfText,
+  mergeQuestionBatches,
   generatePatternReport,
   generateStudyPlan,
   generatePracticeQuestions,
