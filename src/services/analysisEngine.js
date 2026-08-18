@@ -234,7 +234,7 @@ function getFocusedStudyResource(discipline, topic) {
 
 function parseTopics(value) {
   try {
-    const parsed = JSON.parse(value || '[]');
+    const parsed = Array.isArray(value) ? value : JSON.parse(value || '[]');
     return parsed.map(item => typeof item === 'string' ? item : item.topic).filter(Boolean);
   } catch (e) {
     return [];
@@ -246,24 +246,25 @@ function normalizeTopic(topic, discipline) {
   return value || `Revisão geral de ${fixMojibake(discipline)}`;
 }
 
-function getExamYears() {
-  return db.prepare(`
+async function getExamYears() {
+  const rows = await db.query(`
     SELECT DISTINCT e.ano
     FROM exams e
     JOIN discipline_stats ds ON ds.exam_id = e.id
     WHERE e.num_questoes > 0
     ORDER BY e.ano
-  `).all().map(row => row.ano);
+  `);
+  return rows.map(row => row.ano);
 }
 
-function getDisciplineWeights(totalQuestions = 60) {
-  const rows = db.prepare(`
+async function getDisciplineWeights(totalQuestions = 60) {
+  const rows = await db.query(`
     SELECT ds.discipline, e.ano, ds.num_questions
     FROM discipline_stats ds
     JOIN exams e ON e.id = ds.exam_id
     WHERE e.num_questoes > 0 AND ds.num_questions > 0
     ORDER BY e.ano
-  `).all();
+  `);
 
   const byDiscipline = new Map();
   const maxYear = rows.reduce((max, row) => Math.max(max, row.ano || 0), 0);
@@ -295,7 +296,7 @@ function getDisciplineWeights(totalQuestions = 60) {
     .sort((a, b) => b.target - a.target);
 }
 
-function getTopicEvidence() {
+async function getTopicEvidence() {
   const evidence = new Map();
 
   const add = ({ discipline, topic, ano, questionNumber, weight = 1 }) => {
@@ -314,12 +315,13 @@ function getTopicEvidence() {
     evidence.set(key, current);
   };
 
-  db.prepare(`
+  const questionRows = await db.query(`
     SELECT q.discipline, q.topic, q.number, e.ano
     FROM questions q
     LEFT JOIN exams e ON e.id = q.exam_id
     WHERE q.source != 'ai_practice' AND e.num_questoes > 0
-  `).all().forEach(row => add({
+  `);
+  questionRows.forEach(row => add({
     discipline: row.discipline,
     topic: row.topic,
     ano: row.ano,
@@ -327,12 +329,13 @@ function getTopicEvidence() {
     weight: 2
   }));
 
-  db.prepare(`
+  const statisticRows = await db.query(`
     SELECT ds.discipline, ds.topics, e.ano
     FROM discipline_stats ds
     JOIN exams e ON e.id = ds.exam_id
     WHERE e.num_questoes > 0
-  `).all().forEach(row => {
+  `);
+  statisticRows.forEach(row => {
     for (const topic of parseTopics(row.topics)) {
       add({ discipline: row.discipline, topic, ano: row.ano, weight: 1 });
     }
@@ -345,12 +348,12 @@ function getTopicEvidence() {
   }));
 }
 
-function getStudyTargets(limit = 40) {
-  const years = getExamYears();
+async function getStudyTargets(limit = 40) {
+  const years = await getExamYears();
   const latestYear = years[years.length - 1] || 0;
-  const disciplineWeights = new Map(getDisciplineWeights(60).map(item => [canonicalDiscipline(item.discipline), item]));
+  const disciplineWeights = new Map((await getDisciplineWeights(60)).map(item => [canonicalDiscipline(item.discipline), item]));
 
-  return getTopicEvidence()
+  return (await getTopicEvidence())
     .map(item => {
       const cleanDiscipline = canonicalDiscipline(item.discipline);
       const discipline = disciplineWeights.get(cleanDiscipline);
@@ -392,9 +395,9 @@ function getStudyTargets(limit = 40) {
     .slice(0, limit);
 }
 
-function attachProgress(targets, userId) {
+async function attachProgress(targets, userId) {
   if (!userId) return targets;
-  const progressRows = db.prepare('SELECT discipline, topic, progress, notes FROM study_progress WHERE user_id = ?').all(userId);
+  const progressRows = await db.query('SELECT discipline, topic, progress, notes FROM study_progress WHERE user_id = $1', [userId]);
   const progressMap = new Map(progressRows.map(row => [
     `${fixMojibake(row.discipline)}||${fixMojibake(row.topic)}`,
     row
@@ -424,9 +427,9 @@ function normalizeTargets(targets, totalQuestions) {
   return targets;
 }
 
-function getProjectedExamLegacy(totalQuestions = 60) {
-  const targets = normalizeTargets(getDisciplineWeights(totalQuestions), totalQuestions);
-  const topicsByDiscipline = getStudyTargets(200).reduce((acc, item) => {
+async function getProjectedExamLegacy(totalQuestions = 60) {
+  const targets = normalizeTargets(await getDisciplineWeights(totalQuestions), totalQuestions);
+  const topicsByDiscipline = (await getStudyTargets(200)).reduce((acc, item) => {
     acc[item.discipline] = acc[item.discipline] || [];
     acc[item.discipline].push(item);
     return acc;
@@ -450,11 +453,11 @@ function getProjectedExamLegacy(totalQuestions = 60) {
   return { totalQuestions, distribution: targets, slots };
 }
 
-function getProjectedExam(totalQuestions = 60) {
-  const years = getExamYears();
+async function getProjectedExam(totalQuestions = 60) {
+  const years = await getExamYears();
   const baseYear = years[years.length - 1] || null;
-  const targets = normalizeTargets(getDisciplineWeights(totalQuestions), totalQuestions);
-  const topicsByDiscipline = getStudyTargets(200).reduce((acc, item) => {
+  const targets = normalizeTargets(await getDisciplineWeights(totalQuestions), totalQuestions);
+  const topicsByDiscipline = (await getStudyTargets(200)).reduce((acc, item) => {
     acc[item.discipline] = acc[item.discipline] || [];
     acc[item.discipline].push(item);
     return acc;
