@@ -7,7 +7,9 @@ const db = require('../db/db');
 const { extractTextFromPdf } = require('../services/pdfService');
 const { parsePdfToQuestions } = require('../services/aiService');
 
-const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+const uploadDir = process.env.VERCEL
+  ? path.join('/tmp', 'uploads')
+  : path.join(__dirname, '..', '..', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } });
 
