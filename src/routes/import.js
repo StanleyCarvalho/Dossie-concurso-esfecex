@@ -115,7 +115,7 @@ router.post('/:id/delete', async (req, res, next) => {
   try {
     const deletedExam = await db.one(`
       DELETE FROM exams
-      WHERE id = $1 AND user_id = $2
+      WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
       RETURNING id, ano, num_questoes
     `, [req.params.id, req.session.userId]);
 
