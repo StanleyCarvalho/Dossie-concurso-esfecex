@@ -64,14 +64,12 @@
         <td><span class="tag <%= e.status.includes('completa') ? 'gold' : '' %>"><%= e.status %></span></td>
         <td class="muted" style="font-size:.8rem;"><%= e.fonte %></td>
         <td>
-          <% if (e.user_id) { %>
-            <form method="POST" action="/import/<%= e.id %>/delete"
-                  onsubmit="return confirm('Excluir a prova de <%= e.ano %> e todas as questões vinculadas? Esta ação não pode ser desfeita.');">
-              <button class="btn danger" type="submit" aria-label="Excluir prova de <%= e.ano %>">Excluir</button>
-            </form>
-          <% } else { %>
-            <span class="muted" style="font-size:.75rem;">Protegida</span>
-          <% } %>
+          <form method="POST" action="/import/<%= e.id %>/delete"
+                onsubmit="return confirm('<%= e.user_id ? 'Excluir a prova de ' + e.ano + ' e todas as questões vinculadas?' : 'ATENÇÃO: esta é uma prova seed compartilhada. Excluir a prova de ' + e.ano + ' removerá definitivamente suas estatísticas do banco.' %> Esta ação não pode ser desfeita.');">
+            <button class="btn danger" type="submit" aria-label="Excluir prova de <%= e.ano %>">
+              <%= e.user_id ? 'Excluir' : 'Excluir seed' %>
+            </button>
+          </form>
         </td>
       </tr>
     <% }) %>
