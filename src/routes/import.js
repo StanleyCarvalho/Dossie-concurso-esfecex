@@ -28,10 +28,14 @@ router.get('/', async (req, res, next) => {
 });
 
 router.post('/', upload.single('provaPdf'), async (req, res) => {
-  const { ano, cargo, banca } = req.body;
+  const { ano, cargo, banca, numQuestoes } = req.body;
   const startedAt = Date.now();
   try {
     if (!req.file) throw new Error('Selecione um arquivo PDF para importar.');
+    const expectedQuestions = Number(numQuestoes || 60);
+    if (!Number.isInteger(expectedQuestions) || expectedQuestions < 1 || expectedQuestions > 200) {
+      throw new Error('Informe uma quantidade de questões entre 1 e 200.');
+    }
     console.log(JSON.stringify({
       level: 'info',
       message: 'pdf_import_started',
@@ -40,7 +44,7 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
       userId: req.session.userId
     }));
     const rawText = await extractTextFromPdf(req.file.path);
-    const questions = await parsePdfToQuestions(rawText, { ano, cargo, banca });
+    const questions = await parsePdfToQuestions(rawText, { ano, cargo, banca, expectedQuestions });
 
     if (!questions.length) {
       throw new Error('Nenhuma questão foi identificada no PDF.');
