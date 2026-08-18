@@ -1,15 +1,20 @@
 require('dotenv').config({ override: true });
+require('express-async-errors');
 const express = require('express');
 const path = require('path');
 const { marked } = require('marked');
 const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
+const PgStore = require('connect-pg-simple')(session);
 const db = require('./src/db/db');
 const { router: authRouter, requireAuth } = require('./src/routes/auth');
 const { fixMojibake } = require('./src/services/textService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+if (!process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET não configurada.');
+}
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -18,11 +23,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  store: new SQLiteStore({
-    db: 'sessions.sqlite',
-    dir: process.env.VERCEL ? '/tmp' : path.join(__dirname, 'data')
+  store: new PgStore({
+    pool: db.pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true
   }),
-  secret: process.env.SESSION_SECRET || 'troque-este-segredo-no-env',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -32,20 +38,29 @@ app.use(session({
   }
 }));
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/api/health', async (req, res) => {
+  try {
+    await db.ping();
+    res.json({ status: 'ok', database: 'postgresql' });
+  } catch (error) {
+    res.status(503).json({ status: 'error', database: 'unavailable' });
+  }
 });
 
 // helper de markdown disponível em todas as views + define `active`/`title` default
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
+  try {
   res.locals.markdownToHtml = (md) => marked.parse(md || '');
   res.locals.title = res.locals.title || '';
   res.locals.active = res.locals.active || '';
   res.locals.t = fixMojibake;
-  res.locals.user = req.session.userId
-    ? db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(req.session.userId)
-    : null;
-  next();
+    res.locals.user = req.session.userId
+      ? await db.one('SELECT id, email, name FROM users WHERE id = $1', [req.session.userId])
+      : null;
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use(authRouter);
@@ -73,6 +88,12 @@ app.use('/simulados', require('./src/routes/simulados'));
 
 app.use((req, res) => {
   res.status(404).render('error', { message: 'Página não encontrada.' });
+});
+
+app.use((error, req, res, next) => {
+  console.error(error);
+  if (res.headersSent) return next(error);
+  res.status(500).render('error', { message: 'Não foi possível concluir a operação.' });
 });
 
 if (require.main === module) {
