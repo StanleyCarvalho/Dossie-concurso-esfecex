@@ -14,8 +14,12 @@
 <% if (result) { %>
   <% if (result.success) { %>
     <div class="card" style="border-color:var(--ok); margin-bottom:20px;">
-      ✅ <%= result.count %> questões importadas e classificadas com sucesso.
-      <a href="/questoes">Ver banco de questões →</a>
+      ✅ <% if (result.message) { %>
+        <%= result.message %>
+      <% } else { %>
+        <%= result.count %> questões importadas e classificadas com sucesso.
+        <a href="/questoes">Ver banco de questões →</a>
+      <% } %>
     </div>
   <% } else { %>
     <div class="card" style="border-color:var(--danger); margin-bottom:20px;">
@@ -50,7 +54,7 @@
 
 <h3 style="margin-top:32px;">Provas cadastradas</h3>
 <table>
-  <thead><tr><th>Ano</th><th>Banca</th><th>Questões</th><th>Status</th><th>Fonte</th></tr></thead>
+  <thead><tr><th>Ano</th><th>Banca</th><th>Questões</th><th>Status</th><th>Fonte</th><th>Ações</th></tr></thead>
   <tbody>
     <% exams.forEach(e => { %>
       <tr>
@@ -59,6 +63,16 @@
         <td class="mono"><%= e.num_questoes %></td>
         <td><span class="tag <%= e.status.includes('completa') ? 'gold' : '' %>"><%= e.status %></span></td>
         <td class="muted" style="font-size:.8rem;"><%= e.fonte %></td>
+        <td>
+          <% if (e.user_id) { %>
+            <form method="POST" action="/import/<%= e.id %>/delete"
+                  onsubmit="return confirm('Excluir a prova de <%= e.ano %> e todas as questões vinculadas? Esta ação não pode ser desfeita.');">
+              <button class="btn danger" type="submit" aria-label="Excluir prova de <%= e.ano %>">Excluir</button>
+            </form>
+          <% } else { %>
+            <span class="muted" style="font-size:.75rem;">Protegida</span>
+          <% } %>
+        </td>
       </tr>
     <% }) %>
   </tbody>
