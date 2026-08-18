@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' && title ? title + ' - ESFCEx Informática' : 'ESFCEx Informática' %></title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">EP</span>
+      <span>
+        DOSSIÊ DE PREPARAÇÃO
+        <span class="title">ESFCEx · Informática</span>
+      </span>
+    </div>
+    <nav class="nav">
+      <a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>"><span class="num">01</span>Painel geral</a>
+      <a href="/proxima-prova" class="<%= active === 'proxima' ? 'active' : '' %>"><span class="num">02</span>Possível próxima prova</a>
+      <a href="/analise" class="<%= active === 'analise' ? 'active' : '' %>"><span class="num">03</span>Análise de padrões</a>
+      <a href="/plano-estudos" class="<%= active === 'plano' ? 'active' : '' %>"><span class="num">04</span>Plano de estudos</a>
+      <a href="/questoes" class="<%= active === 'questoes' ? 'active' : '' %>"><span class="num">05</span>Banco de questões</a>
+      <a href="/simulados" class="<%= active === 'simulados' ? 'active' : '' %>"><span class="num">06</span>Simulados</a>
+      <a href="/import" class="<%= active === 'import' ? 'active' : '' %>"><span class="num">07</span>Importar provas</a>
+    </nav>
+    <% if (user) { %>
+      <div class="user-box">
+        <strong><%= user.name || user.email %></strong>
+        <span><%= user.email %></span>
+        <form method="POST" action="/logout">
+          <button class="btn secondary" type="submit">Sair</button>
+        </form>
+      </div>
+    <% } %>
+    <div class="stamp">BANCA: VUNESP<br>CARGO: INFORMÁTICA</div>
+  </aside>
+  <main class="main">

@@ -1,0 +1,104 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Inteligencia de banca</span>
+  <h1>Analise de padroes - VUNESP / ESFCEx</h1>
+  <p class="muted">Matriz de recorrencia por disciplina e assunto, com uma prova-modelo provavel para orientar estudo. E uma projecao estatistica sobre temas, nao uma garantia literal de questoes futuras.</p>
+</div>
+
+<form method="POST" action="/analise/gerar" style="margin-bottom:24px;">
+  <button class="btn" type="submit">Gerar relatorio com IA</button>
+  <span class="muted" style="font-size:.8rem; margin-left:10px;">A analise abaixo ja usa calculo local; a IA apenas aprofunda a interpretacao.</span>
+</form>
+
+<div class="grid grid-2" style="align-items:start; margin-bottom:18px;">
+  <div class="card">
+    <h3>Distribuicao provavel da proxima prova</h3>
+    <p class="muted" style="font-size:.82rem;">Peso calculado por recorrencia historica e reforco do ano mais recente.</p>
+    <% projectedExam.distribution.forEach(d => { %>
+      <div class="bar-row">
+        <span class="name"><%= t(d.discipline) %></span>
+        <span class="bar-track"><span class="bar-fill" style="width:<%= Math.round(d.proportion * 100) %>%"></span></span>
+        <span class="pct"><%= d.target %>q</span>
+      </div>
+    <% }) %>
+  </div>
+
+  <div class="card">
+    <h3>Assuntos mais cobrados</h3>
+    <p class="muted" style="font-size:.82rem;">Prioridade por anos de incidencia, presenca recente e questoes reais importadas.</p>
+    <% studyTargets.slice(0, 8).forEach(target => { %>
+      <div style="border-bottom:1px solid var(--border); padding:8px 0;">
+        <span class="tag gold"><%= t(target.discipline) %></span>
+        <span class="tag"><%= target.confidence %></span>
+        <strong style="display:block; margin-top:5px;"><%= t(target.topic) %></strong>
+        <span class="muted mono" style="font-size:.72rem;">score <%= target.score %> - anos: <%= target.years.join(', ') || 'sem ano' %></span>
+      </div>
+    <% }) %>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3>Prova-modelo do proximo ano</h3>
+  <p class="muted" style="font-size:.82rem;">Estrutura por questao para voce treinar no formato mais proximo do padrao observado.</p>
+  <table>
+    <thead>
+      <tr><th>Questao</th><th>Disciplina</th><th>Assunto provavel</th><th>Confianca</th><th>Motivo</th></tr>
+    </thead>
+    <tbody>
+      <% projectedExam.slots.forEach(slot => { %>
+        <tr>
+          <td class="mono">Q<%= slot.number %></td>
+          <td><%= t(slot.discipline) %></td>
+          <td><%= t(slot.topic) %></td>
+          <td><span class="tag"><%= slot.confidence %></span></td>
+          <td class="muted" style="font-size:.82rem;"><%= slot.reason %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3>Matriz precisa de estudo</h3>
+  <table>
+    <thead>
+      <tr><th>Prioridade</th><th>Assunto</th><th>Onde estudar</th><th>Revisar por questoes</th></tr>
+    </thead>
+    <tbody>
+      <% studyTargets.forEach(target => { %>
+        <tr>
+          <td class="mono"><%= target.score %></td>
+          <td>
+            <span class="tag gold"><%= t(target.discipline) %></span>
+            <strong style="display:block; margin-top:5px;"><%= t(target.topic) %></strong>
+            <span class="muted mono" style="font-size:.72rem;">anos: <%= target.years.join(', ') || 'sem ano' %></span>
+          </td>
+          <td>
+            <a href="<%= target.sourceUrl %>" target="_blank" rel="noopener"><%= t(target.source) %></a>
+            <div class="muted" style="font-size:.82rem; margin-top:4px;">Foque em: <%= target.focus.map(item => t(item)).join('; ') %></div>
+          </td>
+          <td class="muted" style="font-size:.82rem;">
+            <% if (target.refs.length) { %>
+              <%= target.refs.join(', ') %><br>
+            <% } %>
+            <a href="/questoes?discipline=<%= encodeURIComponent(target.discipline) %>">abrir questoes da disciplina</a>
+            <div class="progress-mini"><span style="width:<%= target.progress %>%"></span></div>
+            <span class="mono"><%= target.progress %>% estudado</span>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<% if (!report) { %>
+  <div class="empty">Nenhum relatorio com IA gerado ainda. A matriz acima ja funciona com os dados importados.</div>
+<% } else { %>
+  <p class="muted mono" style="font-size:.75rem;">Relatorio IA gerado em <%= new Date(report.generated_at).toLocaleString('pt-BR') %></p>
+  <div class="card markdown">
+    <%- markdownToHtml(report.content_md) %>
+  </div>
+<% } %>
+
+<%- include('partials/foot') %>

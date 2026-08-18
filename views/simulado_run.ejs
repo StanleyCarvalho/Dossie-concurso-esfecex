@@ -1,0 +1,86 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Simulado #<%= simulado.id %></span>
+  <h1><%= simulado.title %></h1>
+  <p class="muted"><%= simulado.total_questions %> questões · <%= simulado.duration_minutes %> minutos · <%= finished ? ('Nota: ' + Math.round(simulado.score) + '%') : 'Em andamento' %></p>
+</div>
+
+<% if (!finished) { %>
+  <form method="POST" action="/simulados/<%= simulado.id %>/finalizar" style="margin-bottom:20px;" onsubmit="return confirm('Finalizar simulado? Isso calculará sua nota final.');">
+    <button class="btn" type="submit">Finalizar e corrigir</button>
+  </form>
+<% } %>
+
+<% questions.forEach(q => { %>
+  <div class="question-card" data-sqid="<%= q.sq_id %>" data-correct="<%= q.correct_letter || '' %>">
+    <div class="question-meta">
+      <span class="tag gold"><%= q.discipline %></span>
+      <% if (q.topic) { %><span class="tag"><%= q.topic %></span><% } %>
+      <% if (q.source === 'ai_practice') { %><span class="badge-ai">Questão de treino (IA)</span><% } %>
+    </div>
+    <p><%= q.statement %></p>
+    <div class="alts">
+      <% ['a','b','c','d','e'].forEach(l => { const alt = q['alt_'+l]; if (alt) { %>
+        <button type="button" class="alt <%= q.chosen_letter === l.toUpperCase() ? 'selected' : '' %>" data-letter="<%= l.toUpperCase() %>" <%= finished ? 'disabled' : '' %>>
+          <strong><%= l.toUpperCase() %>)</strong> <%= alt %>
+        </button>
+      <% } }) %>
+    </div>
+    <div class="explanation muted" style="font-size:.85rem; margin-top:10px; display:none;"></div>
+    <button type="button" class="btn secondary explain-btn" style="margin-top:8px; font-size:.78rem; padding:6px 12px;" data-qid="<%= q.id %>">Ver explicação</button>
+  </div>
+<% }) %>
+
+<script>
+const finished = <%- finished ? 'true' : 'false' %>;
+
+document.querySelectorAll('.question-card').forEach(card => {
+  const sqId = card.dataset.sqid;
+  const correctLetter = card.dataset.correct;
+
+  card.querySelectorAll('.alt').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (finished) return;
+      card.querySelectorAll('.alt').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      const letter = btn.dataset.letter;
+
+      const resp = await fetch('/simulados/<%= simulado.id %>/responder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sqId, letter })
+      });
+      const data = await resp.json();
+
+      if (correctLetter) {
+        card.querySelectorAll('.alt').forEach(b => {
+          if (b.dataset.letter === correctLetter) b.classList.add('correct');
+          else if (b.dataset.letter === letter && data.correct === 0) b.classList.add('incorrect');
+        });
+      }
+    });
+  });
+
+  if (finished && correctLetter) {
+    card.querySelectorAll('.alt').forEach(b => {
+      if (b.dataset.letter === correctLetter) b.classList.add('correct');
+    });
+  }
+});
+
+document.querySelectorAll('.explain-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const card = btn.closest('.question-card');
+    const box = card.querySelector('.explanation');
+    if (box.style.display === 'block') { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.textContent = 'Carregando explicação...';
+    const resp = await fetch('/simulados/questao/' + btn.dataset.qid + '/explicar', { method: 'POST' });
+    const data = await resp.json();
+    box.textContent = data.explanation || data.error || 'Sem explicação disponível.';
+  });
+});
+</script>
+
+<%- include('partials/foot') %>

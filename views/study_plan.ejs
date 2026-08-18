@@ -1,0 +1,123 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Roteiro priorizado</span>
+  <h1>Plano de estudos</h1>
+  <p class="muted">Priorizacao por incidencia historica, recorrencia recente e desempenho em simulados.</p>
+</div>
+
+<form method="POST" action="/plano-estudos/gerar" style="margin-bottom:24px;">
+  <button class="btn" type="submit">(Re)gerar plano de estudos com IA</button>
+  <span class="muted" style="font-size:.8rem; margin-left:10px;">A matriz objetiva abaixo ja funciona com os dados importados.</span>
+</form>
+
+<div class="card planner-card" style="margin-bottom:18px;">
+  <div class="planner-head">
+    <div>
+      <h3>Agenda semanal cirúrgica</h3>
+      <p class="muted" style="font-size:.86rem;">Escolha seus dias e horas. O sistema distribui o tempo pelos assuntos com maior chance de cobrança no ano seguinte, usando a matriz e seu progresso.</p>
+    </div>
+    <div class="planner-total mono"><%= Math.round(weeklySchedule.totalWeeklyMinutes / 60 * 10) / 10 %>h/semana</div>
+  </div>
+
+  <form method="GET" action="/plano-estudos" class="availability-form">
+    <div class="day-picker">
+      <% Object.entries(dayLabels).forEach(([key, label]) => { %>
+        <label class="day-chip">
+          <input type="checkbox" name="days" value="<%= key %>" <%= selectedDays.includes(key) ? 'checked' : '' %>>
+          <span><%= label.slice(0, 3) %></span>
+        </label>
+      <% }) %>
+    </div>
+    <label class="hours-field">Horas por dia
+      <input type="number" name="hoursPerDay" min="0.5" max="12" step="0.5" value="<%= hoursPerDay %>">
+    </label>
+    <button class="btn" type="submit">Gerar agenda</button>
+  </form>
+
+  <% if (weeklySchedule.blocks.length === 0) { %>
+    <div class="empty" style="margin-top:14px;">Escolha pelo menos um dia para montar sua agenda.</div>
+  <% } else { %>
+    <div class="schedule-grid">
+      <% weeklySchedule.studyDays.forEach(day => { %>
+        <section class="schedule-day">
+          <h4><%= dayLabels[day] %></h4>
+          <% weeklySchedule.blocks.filter(block => block.day === day).forEach(block => { %>
+            <div class="schedule-block">
+              <div class="schedule-time mono"><%= block.minutes %> min</div>
+              <div>
+                <span class="tag gold"><%= t(block.discipline) %></span>
+                <strong><%= t(block.topic) %></strong>
+                <a href="<%= block.sourceUrl %>" target="_blank" rel="noopener">videoaula/material foco</a>
+                <ul>
+                  <% block.tasks.forEach(task => { %><li><%= t(task) %></li><% }) %>
+                </ul>
+              </div>
+            </div>
+          <% }) %>
+        </section>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3>Roteiro objetivo por incidencia</h3>
+  <p class="muted" style="font-size:.82rem;">Use esta lista como trilha principal: ela vem diretamente das provas importadas e dos dados historicos.</p>
+  <table>
+    <thead>
+      <tr><th>Ordem</th><th>Disciplina / assunto</th><th>Onde estudar</th><th>Como revisar</th></tr>
+    </thead>
+    <tbody>
+      <% studyTargets.forEach((target, idx) => { %>
+        <tr>
+          <td class="mono"><%= idx + 1 %></td>
+          <td>
+            <span class="tag gold"><%= t(target.discipline) %></span>
+            <span class="tag"><%= target.confidence %></span>
+            <strong style="display:block; margin-top:5px;"><%= t(target.topic) %></strong>
+            <span class="muted mono" style="font-size:.72rem;">prioridade <%= target.score %> - anos: <%= target.years.join(', ') || 'sem ano' %></span>
+          </td>
+          <td>
+            <a href="<%= target.sourceUrl %>" target="_blank" rel="noopener"><%= t(target.source) %></a>
+            <div class="muted" style="font-size:.82rem;">Foque em: <%= target.focus.map(item => t(item)).join('; ') %></div>
+          </td>
+          <td class="muted" style="font-size:.82rem; min-width:220px;">
+            <% if (target.refs.length) { %><%= target.refs.join(', ') %><br><% } %>
+            <a href="/questoes?discipline=<%= encodeURIComponent(target.discipline) %>">questoes reais da disciplina</a>
+            <form method="POST" action="/progresso" class="progress-form">
+              <input type="hidden" name="discipline" value="<%= target.discipline %>">
+              <input type="hidden" name="topic" value="<%= target.topic %>">
+              <label class="progress-label">Progresso: <strong><%= target.progress %>%</strong></label>
+              <input type="range" name="progress" min="0" max="100" step="5" value="<%= target.progress %>">
+              <input type="text" name="notes" value="<%= target.progressNotes || '' %>" placeholder="observacao pessoal">
+              <button class="btn secondary" type="submit">Salvar</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<% if (items.length === 0) { %>
+  <div class="empty">Nenhum plano com IA gerado ainda. Clique no botao acima se quiser notas explicativas por assunto.</div>
+<% } else { %>
+  <h3 style="margin:20px 0 12px;">Notas de estudo geradas por IA</h3>
+  <% items.forEach(it => { %>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div>
+          <span class="tag gold"><%= it.discipline %></span>
+          <span class="tag"><%= it.status %></span>
+          <h3 style="margin-top:8px;"><%= it.topic %></h3>
+        </div>
+        <div class="mono" style="color:var(--gold); font-size:1.3rem;"><%= Math.round(it.priority_score) %></div>
+      </div>
+      <p class="muted" style="font-size:.85rem;"><strong>Por que:</strong> <%= it.rationale %></p>
+      <p style="font-size:.88rem;"><%= it.study_notes %></p>
+    </div>
+  <% }) %>
+<% } %>
+
+<%- include('partials/foot') %>

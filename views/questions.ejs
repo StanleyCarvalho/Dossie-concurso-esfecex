@@ -1,0 +1,39 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Banco de questões</span>
+  <h1>Questões reais importadas</h1>
+  <p class="muted">Questões extraídas de provas oficiais que você importou. Filtre por disciplina para revisar.</p>
+</div>
+
+<form method="GET" style="margin-bottom:20px;">
+  <select name="discipline" onchange="this.form.submit()">
+    <option value="">Todas as disciplinas</option>
+    <% disciplines.forEach(d => { %>
+      <option value="<%= d %>" <%= selected === d ? 'selected' : '' %>><%= t(d) %></option>
+    <% }) %>
+  </select>
+</form>
+
+<% if (questions.length === 0) { %>
+  <div class="empty">Nenhuma questão importada ainda. Vá em <a href="/import">Importar provas</a> para começar.</div>
+<% } else { %>
+  <% questions.forEach(q => { %>
+    <div class="question-card">
+      <div class="question-meta">
+        <span class="tag gold"><%= t(q.discipline) %></span>
+        <% if (q.topic) { %><span class="tag"><%= t(q.topic) %></span><% } %>
+        <% if (q.number) { %><span class="tag mono">Q<%= q.number %></span><% } %>
+      </div>
+      <p><%= t(q.statement) %></p>
+      <div style="font-size:.85rem; color:var(--text-muted); line-height:1.9;">
+        <% ['a','b','c','d','e'].forEach(l => { const alt = q['alt_'+l]; if (alt) { %>
+          <div><strong style="color:<%= q.correct_letter === l.toUpperCase() ? 'var(--ok)' : 'var(--text-muted)' %>;"><%= l.toUpperCase() %>)</strong> <%= t(alt) %></div>
+        <% } }) %>
+      </div>
+      <% if (q.correct_letter) { %><p class="mono" style="font-size:.75rem; margin-top:8px;">Gabarito: <span style="color:var(--ok);"><%= q.correct_letter %></span></p><% } %>
+    </div>
+  <% }) %>
+<% } %>
+
+<%- include('partials/foot') %>

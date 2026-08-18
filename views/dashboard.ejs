@@ -1,0 +1,59 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Situação atual</span>
+  <h1>Painel geral</h1>
+  <p class="muted">Visão consolidada da sua preparação para o Exame Intelectual · EsFCEx (VUNESP) · cargo Informática.</p>
+</div>
+
+<div class="grid grid-3" style="margin-bottom:28px;">
+  <div class="card stat"><div class="value"><%= totalExams %></div><div class="label">Provas no histórico</div></div>
+  <div class="card stat"><div class="value"><%= totalQuestions %></div><div class="label">Questões reais no banco</div></div>
+  <div class="card stat"><div class="value"><%= totalSimulados %></div><div class="label">Simulados realizados</div></div>
+</div>
+
+<div class="grid grid-2" style="align-items:start;">
+  <div class="card">
+    <h3>Distribuição histórica por disciplina</h3>
+    <p class="muted" style="font-size:.82rem;">Peso médio observado nas provas cadastradas (base para o blueprint dos simulados).</p>
+    <% if (blueprint.length === 0) { %>
+      <div class="empty">Sem dados suficientes ainda. Rode <code>npm run seed</code> ou importe uma prova.</div>
+    <% } else { %>
+      <% blueprint.forEach(b => { %>
+        <div class="bar-row">
+          <span class="name"><%= b.discipline %></span>
+          <span class="bar-track"><span class="bar-fill" style="width:<%= Math.round(b.proportion*100) %>%"></span></span>
+          <span class="pct"><%= Math.round(b.proportion*100) %>%</span>
+        </div>
+      <% }) %>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3>Desempenho por disciplina</h3>
+    <p class="muted" style="font-size:.82rem;">Baseado nas questões já respondidas em simulados.</p>
+    <% if (perfRows.length === 0) { %>
+      <div class="empty">Faça seu primeiro simulado para começar a ver seu desempenho aqui.</div>
+    <% } else { %>
+      <% perfRows.forEach(p => { const pct = Math.round((p.acertos/p.total)*100); %>
+        <div class="bar-row">
+          <span class="name"><%= p.discipline %></span>
+          <span class="bar-track"><span class="bar-fill" style="width:<%= pct %>%; background:<%= pct >= 60 ? 'linear-gradient(90deg,#3d5c3d,#5C8A5C)' : 'linear-gradient(90deg,#7a3c33,#A85142)' %>;"></span></span>
+          <span class="pct"><%= pct %>%</span>
+        </div>
+      <% }) %>
+    <% } %>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3>Próximos passos recomendados</h3>
+  <ol style="padding-left:1.2em; color:var(--text-muted); font-size:.9rem; line-height:2;">
+    <li><a href="/import">Importe as provas oficiais</a> (PDF da VUNESP) para popular o banco de questões reais.</li>
+    <li><a href="/analise">Gere o relatório de padrões da banca</a> com base no histórico.</li>
+    <li><a href="/plano-estudos">Gere seu plano de estudos priorizado</a> a partir dos padrões identificados.</li>
+    <li><a href="/simulados">Faça um simulado</a> respeitando a proporção real de disciplinas da prova.</li>
+  </ol>
+</div>
+
+<%- include('partials/foot') %>

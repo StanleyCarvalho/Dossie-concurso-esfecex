@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= mode === 'register' ? 'Cadastro' : 'Login' %> - ESFCEx Informatica</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-panel">
+      <span class="eyebrow">Dossie pessoal</span>
+      <h1><%= mode === 'register' ? 'Criar usuario' : 'Entrar na plataforma' %></h1>
+      <p class="muted">Seu progresso, metodologia e materiais importados ficam ligados ao seu e-mail.</p>
+
+      <% if (error) { %>
+        <div class="empty" style="padding:12px; margin-bottom:14px; color:var(--danger);"><%= error %></div>
+      <% } %>
+
+      <form method="POST" action="<%= mode === 'register' ? '/cadastro' : '/login' %>" class="auth-form">
+        <% if (mode === 'register') { %>
+          <label>Nome
+            <input type="text" name="name" autocomplete="name">
+          </label>
+        <% } %>
+        <label>E-mail
+          <input type="text" name="email" autocomplete="email" required>
+        </label>
+        <label>Senha
+          <input type="password" name="password" autocomplete="<%= mode === 'register' ? 'new-password' : 'current-password' %>" required>
+        </label>
+        <button class="btn" type="submit"><%= mode === 'register' ? 'Cadastrar' : 'Entrar' %></button>
+      </form>
+
+      <% if (mode === 'register') { %>
+        <p class="muted" style="margin-top:16px;">Ja tem conta? <a href="/login">Entrar</a></p>
+      <% } else { %>
+        <p class="muted" style="margin-top:16px;">Ainda nao tem conta? <a href="/cadastro">Criar cadastro</a></p>
+      <% } %>
+    </section>
+  </main>
+</body>
+</html>

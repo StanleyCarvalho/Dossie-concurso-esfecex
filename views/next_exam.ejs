@@ -1,0 +1,83 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Possivel proxima prova</span>
+  <h1>Prova-modelo completa - 60 questoes</h1>
+  <p class="muted">Esta pagina monta a prova mais provavel pelo padrao historico importado: peso por disciplina, recorrencia de assunto, presenca recente e questoes reais no banco. Ano-base atual: <strong><%= projectedExam.baseYear || 'sem prova completa' %></strong>.</p>
+</div>
+
+<div class="grid grid-2" style="align-items:start; margin-bottom:18px;">
+  <div class="card">
+    <h3>Distribuicao prevista</h3>
+    <% projectedExam.distribution.forEach(d => { %>
+      <div class="bar-row">
+        <span class="name"><%= t(d.discipline) %></span>
+        <span class="bar-track"><span class="bar-fill" style="width:<%= Math.round(d.proportion * 100) %>%"></span></span>
+        <span class="pct"><%= d.target %>q</span>
+      </div>
+    <% }) %>
+  </div>
+
+  <div class="card">
+    <h3>Regra de uso</h3>
+    <p class="muted" style="font-size:.88rem;">Estude apenas o assunto foco de cada linha. Se o link abrir uma lista de videos, escolha os resultados mais recentes e diretamente ligados ao termo pesquisado. Depois resolva questoes reais da disciplina e marque o progresso.</p>
+    <p class="muted" style="font-size:.82rem;"><strong>Precisao:</strong> a prova futura nao pode ser garantida literalmente, mas esta matriz evita estudo disperso e prioriza o que o historico indica com maior forca.</p>
+  </div>
+</div>
+
+<div class="next-exam-list">
+  <% projectedExam.slots.forEach(slot => { %>
+    <article class="question-card next-slot">
+      <div class="next-slot-head">
+        <div>
+          <span class="tag mono">Q<%= String(slot.number).padStart(2, '0') %></span>
+          <span class="tag gold"><%= t(slot.discipline) %></span>
+          <span class="tag"><%= slot.confidence %></span>
+        </div>
+        <strong class="next-score"><%= slot.score %></strong>
+      </div>
+
+      <h3><%= t(slot.topic) %></h3>
+      <p class="muted" style="font-size:.86rem;"><%= t(slot.reason) %></p>
+
+      <div class="predicted-question">
+        <span class="eyebrow" style="margin-bottom:2px;">Possivel questao</span>
+        <strong><%= t(slot.likelyQuestion.charge) %></strong>
+        <p><%= t(slot.likelyQuestion.stem) %></p>
+        <p class="muted"><strong>Pegadinha provavel:</strong> <%= t(slot.likelyQuestion.trap) %></p>
+        <p class="muted mono" style="font-size:.74rem;"><%= t(slot.likelyQuestion.evidence) %></p>
+      </div>
+
+      <div class="next-study">
+        <div>
+          <span class="eyebrow" style="margin-bottom:2px;">Onde estudar</span>
+          <a href="<%= slot.sourceUrl %>" target="_blank" rel="noopener"><%= slot.directLesson ? 'Videoaula direta' : 'Busca focada' %>: <%= t(slot.source) %> - <%= t(slot.topic) %></a>
+        </div>
+        <div>
+          <span class="eyebrow" style="margin-bottom:2px;">Revisao objetiva</span>
+          <ul>
+            <% slot.checklist.forEach(item => { %>
+              <li><%= t(item) %></li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+
+      <% if (slot.refs && slot.refs.length) { %>
+        <p class="muted mono" style="font-size:.75rem;">Evidencia historica: <%= slot.refs.join(', ') %></p>
+      <% } %>
+
+      <div class="progress-mini"><span style="width:<%= slot.progress %>%"></span></div>
+      <form method="POST" action="/progresso" class="progress-form inline-progress">
+        <input type="hidden" name="discipline" value="<%= slot.discipline %>">
+        <input type="hidden" name="topic" value="<%= slot.topic %>">
+        <label class="progress-label">Progresso neste assunto: <strong><%= slot.progress %>%</strong></label>
+        <input type="range" name="progress" min="0" max="100" step="5" value="<%= slot.progress %>">
+        <input type="text" name="notes" value="<%= slot.progressNotes || '' %>" placeholder="nota rapida do que falta revisar">
+        <button class="btn secondary" type="submit">Salvar</button>
+      </form>
+    </article>
+  <% }) %>
+</div>
+
+<%- include('partials/foot') %>

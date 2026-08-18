@@ -1,0 +1,14 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Erro</span>
+  <h1>Algo deu errado</h1>
+</div>
+<div class="card" style="border-color:var(--danger);">
+  <p class="mono"><%= message %></p>
+  <% if (message && message.includes('GEMINI_API_KEY')) { %>
+    <p class="muted">Configure a variável <code>GEMINI_API_KEY</code> no arquivo <code>.env</code> (veja o README).</p>
+  <% } %>
+</div>
+
+<%- include('partials/foot') %>

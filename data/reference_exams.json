@@ -1,0 +1,61 @@
+{
+  "_readme": "Dados agregados de distribuição de disciplinas das provas VUNESP/ESFCEx - cargo Informática, obtidos de fontes públicas (qconcursos, pciconcursos) em ago/2026. Servem como base estatística inicial para a análise de padrões. Para o banco de QUESTÕES completo (enunciados/alternativas), use o importador de PDF em /import com os arquivos oficiais baixados em vunesp.com.br. Os anos 2022-2024 têm apenas as 3 disciplinas mais cobradas conhecidas (dado público parcial); 2025 tem o detalhamento completo.",
+  "exams": [
+    {
+      "ano": 2022,
+      "data_aplicacao": "2022-09-11",
+      "num_questoes": 60,
+      "status": "seed-parcial",
+      "disciplines": [
+        { "discipline": "Português", "num_questions": 8, "topics": [] },
+        { "discipline": "Programação", "num_questions": 7, "topics": [] },
+        { "discipline": "Redes de Computadores", "num_questions": 7, "topics": [] }
+      ]
+    },
+    {
+      "ano": 2023,
+      "data_aplicacao": "2023-09-03",
+      "num_questoes": 60,
+      "status": "seed-parcial",
+      "disciplines": [
+        { "discipline": "Português", "num_questions": 8, "topics": [] },
+        { "discipline": "Banco de Dados", "num_questions": 7, "topics": [] },
+        { "discipline": "História", "num_questions": 6, "topics": ["História do Brasil"] }
+      ]
+    },
+    {
+      "ano": 2024,
+      "data_aplicacao": "2024-07-14",
+      "num_questoes": 60,
+      "status": "seed-parcial",
+      "disciplines": [
+        { "discipline": "Programação", "num_questions": 9, "topics": [] },
+        { "discipline": "Português", "num_questions": 8, "topics": [] },
+        { "discipline": "Geografia", "num_questions": 6, "topics": [] }
+      ]
+    },
+    {
+      "ano": 2025,
+      "data_aplicacao": "2025-07-20",
+      "num_questoes": 50,
+      "status": "seed-completo",
+      "disciplines": [
+        { "discipline": "Português", "num_questions": 8, "topics": ["Interpretação de Textos", "Sintaxe", "Crase", "Funções morfossintáticas da palavra SE", "Morfologia - Pronomes"] },
+        { "discipline": "Geografia", "num_questions": 6, "topics": ["Geografia Física", "Agropecuária", "Meio Ambiente na Geografia", "População"] },
+        { "discipline": "História", "num_questions": 6, "topics": ["História do Brasil"] },
+        { "discipline": "Sistemas Operacionais", "num_questions": 3, "topics": ["Linux", "Comandos"] },
+        { "discipline": "Arquitetura de Computadores", "num_questions": 3, "topics": ["Hardware", "Memória", "Conceitos Básicos em Arquitetura de Computadores", "Modos de endereçamento"] },
+        { "discipline": "Noções de Informática", "num_questions": 1, "topics": ["Hardware - Dispositivos de Armazenamento, Memórias e Periféricos"] },
+        { "discipline": "Programação", "num_questions": 8, "topics": ["Conceitos básicos de programação", "Linguagens de programação", "Programação estruturada", "Programação Orientada a Objetos", "JDBC", "Plataforma Java"] },
+        { "discipline": "Segurança da Informação", "num_questions": 1, "topics": ["Criptografia"] },
+        { "discipline": "Telecomunicações", "num_questions": 1, "topics": ["Sistemas de Transmissão e Modulação", "Redes de Acesso e Infra-estrutura"] },
+        { "discipline": "Redes de Computadores", "num_questions": 4, "topics": ["QoS", "Arquitetura TCP/IP", "Protocolo", "Segurança de Redes", "Captura de Tráfego", "Endereçamento IP"] },
+        { "discipline": "Algoritmos e Estrutura de Dados", "num_questions": 1, "topics": ["Estrutura de Dados"] },
+        { "discipline": "Engenharia de Software", "num_questions": 2, "topics": ["UML", "Teste de Software"] },
+        { "discipline": "Gerência de Projetos", "num_questions": 1, "topics": ["PMBOK e Processos de Gerenciamento de Projetos", "Áreas de conhecimento"] },
+        { "discipline": "Governança de TI", "num_questions": 1, "topics": ["Instrução Normativa N° 4"] },
+        { "discipline": "Banco de Dados", "num_questions": 4, "topics": ["Modelagem de dados", "DER - Diagrama de Entidade e Relacionamento", "SQL", "Banco de Dados Relacionais", "Gerência de Transações", "DW - Data Warehouse", "Banco de Dados Multidimensionais"] }
+      ]
+    }
+  ]
+}

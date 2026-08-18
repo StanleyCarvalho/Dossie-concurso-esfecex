@@ -1,0 +1,67 @@
+<%- include('partials/head') %>
+
+<div class="page-header">
+  <span class="eyebrow">Alimentar o dossiê</span>
+  <h1>Importar provas oficiais</h1>
+  <p class="muted">
+    Baixe o PDF da prova (e, se possível, o gabarito) no site oficial da banca —
+    <a href="https://www.vunesp.com.br" target="_blank" rel="noopener">vunesp.com.br</a>,
+    seção "Provas e Gabaritos" do concurso EsFCEx do ano desejado — e envie aqui.
+    A IA extrai e classifica as questões automaticamente.
+  </p>
+</div>
+
+<% if (result) { %>
+  <% if (result.success) { %>
+    <div class="card" style="border-color:var(--ok); margin-bottom:20px;">
+      ✅ <%= result.count %> questões importadas e classificadas com sucesso.
+      <a href="/questoes">Ver banco de questões →</a>
+    </div>
+  <% } else { %>
+    <div class="card" style="border-color:var(--danger); margin-bottom:20px;">
+      ⚠️ Erro ao importar: <span class="mono"><%= result.error %></span>
+    </div>
+  <% } %>
+<% } %>
+
+<div class="card" style="max-width:520px;">
+  <form method="POST" action="/import" enctype="multipart/form-data">
+    <div style="margin-bottom:14px;">
+      <label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Arquivo PDF da prova</label>
+      <input type="file" name="provaPdf" accept="application/pdf" required style="width:100%;">
+    </div>
+    <div style="display:flex; gap:10px; margin-bottom:14px;">
+      <div style="flex:1;">
+        <label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Ano</label>
+        <input type="number" name="ano" min="2000" max="2030" required style="width:100%;">
+      </div>
+      <div style="flex:1;">
+        <label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Cargo</label>
+        <input type="text" name="cargo" value="Informática" style="width:100%;">
+      </div>
+      <div style="flex:1;">
+        <label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Banca</label>
+        <input type="text" name="banca" value="VUNESP" style="width:100%;">
+      </div>
+    </div>
+    <button class="btn" type="submit">Importar e processar com IA</button>
+  </form>
+</div>
+
+<h3 style="margin-top:32px;">Provas cadastradas</h3>
+<table>
+  <thead><tr><th>Ano</th><th>Banca</th><th>Questões</th><th>Status</th><th>Fonte</th></tr></thead>
+  <tbody>
+    <% exams.forEach(e => { %>
+      <tr>
+        <td class="mono"><%= e.ano %></td>
+        <td><%= e.banca %></td>
+        <td class="mono"><%= e.num_questoes %></td>
+        <td><span class="tag <%= e.status.includes('completa') ? 'gold' : '' %>"><%= e.status %></span></td>
+        <td class="muted" style="font-size:.8rem;"><%= e.fonte %></td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('partials/foot') %>
