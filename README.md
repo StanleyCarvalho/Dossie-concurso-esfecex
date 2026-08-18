@@ -94,6 +94,3 @@ docker build -t esfcex-prep .
 docker run -p 3000:3000 -e GEMINI_API_KEY=xxxx esfcex-prep
 ```
 
-## 8. Sobre a "previsão de 2027"
-
-O relatório de padrões (`/analise`) gera uma estimativa de **peso por disciplina** (quantas questões cada área provavelmente terá) com base na tendência histórica — isso é estatisticamente fundamentado e é exatamente o método que cursinhos usam para priorizar conteúdo. Ele **não** gera nem promete "as questões exatas" da prova de 2027, porque isso não é possível para nenhuma ferramenta, humana ou de IA.
