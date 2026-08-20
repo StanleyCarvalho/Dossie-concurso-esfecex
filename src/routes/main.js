@@ -5,27 +5,25 @@ const { generatePatternReport, generateStudyPlan } = require('../services/aiServ
 const { getBlueprint } = require('../services/simuladoEngine');
 const { getStudyTargets, getProjectedExam, attachProgress } = require('../services/analysisEngine');
 const { buildWeeklySchedule, DAY_LABELS } = require('../services/scheduleEngine');
+const { canonicalDiscipline, canonicalTopic } = require('../services/intelligenceEngine');
 
 function planKey(discipline, topic) {
-  return `${String(discipline || '').trim().toLowerCase()}||${String(topic || '').trim().toLowerCase()}`;
+  return `${canonicalDiscipline(discipline).toLowerCase()}||${canonicalTopic(topic).toLowerCase()}`;
 }
 
 async function getLatestEditalTopics(userId) {
   const edital = await db.one('SELECT id,ano,banca,cargo FROM editais WHERE user_id=$1 ORDER BY ano DESC,created_at DESC LIMIT 1', [userId]);
   if (!edital) return { edital: null, topics: [] };
-  const topics = await db.query(`
-    SELECT et.*,
-      COALESCE(sp.progress,0)::int progress,
-      sp.notes progress_notes
-    FROM edital_topics et
-    LEFT JOIN study_progress sp
-      ON sp.user_id=$2
-      AND lower(sp.discipline)=lower(et.discipline)
-      AND lower(sp.topic)=lower(et.topic)
-    WHERE et.edital_id=$1
-    ORDER BY et.discipline, et.topic, et.subtopic
-  `, [edital.id, userId]);
-  return { edital, topics };
+  const topics = await db.query('SELECT * FROM edital_topics WHERE edital_id=$1 ORDER BY discipline,topic,subtopic', [edital.id]);
+  const progressRows = await db.query('SELECT discipline,topic,progress,notes FROM study_progress WHERE user_id=$1', [userId]);
+  const progressMap = new Map(progressRows.map(row => [planKey(row.discipline, row.topic), row]));
+  return {
+    edital,
+    topics: topics.map(item => {
+      const progress = progressMap.get(planKey(item.discipline, item.topic));
+      return { ...item, progress: Number(progress?.progress || 0), progress_notes: progress?.notes || null };
+    })
+  };
 }
 
 router.get('/', async (req, res, next) => {
@@ -91,14 +89,10 @@ router.get('/plano-estudos', async (req, res) => {
   const studyTargets = await attachProgress(await getStudyTargets(60, req.session.userId), req.session.userId);
   const { edital, topics: editalTopics } = await getLatestEditalTopics(req.session.userId);
   const weeklySchedule = buildWeeklySchedule({ targets: studyTargets, editalTopics, days: selectedDays, hoursPerDay });
-  const todayIndex = (new Date().getDay() + 6) % 7;
   const dayKeys = Object.keys(DAY_LABELS);
-  const todayKey = dayKeys[todayIndex];
+  const todayKey = dayKeys[(new Date().getDay() + 6) % 7];
   const todayBlocks = weeklySchedule.blocks.filter(block => block.day === todayKey);
-  res.render('study_plan', {
-    items, studyTargets, weeklySchedule, todayBlocks, edital, editalTopics,
-    dayLabels: DAY_LABELS, selectedDays, hoursPerDay, querySaved: req.query.saved || ''
-  });
+  res.render('study_plan', { items, studyTargets, weeklySchedule, todayBlocks, edital, editalTopics, dayLabels: DAY_LABELS, selectedDays, hoursPerDay, querySaved: req.query.saved || '' });
 });
 
 router.post('/plano-estudos/agenda/salvar', async (req, res) => {
@@ -110,8 +104,8 @@ router.post('/plano-estudos/agenda/salvar', async (req, res) => {
 });
 
 router.post('/progresso', async (req, res) => {
-  const discipline = String(req.body.discipline || '').trim();
-  const topic = String(req.body.topic || '').trim();
+  const discipline = canonicalDiscipline(String(req.body.discipline || '').trim());
+  const topic = canonicalTopic(String(req.body.topic || '').trim());
   const progress = Math.max(0, Math.min(100, Number(req.body.progress) || 0));
   const notes = String(req.body.notes || '').trim() || null;
   if (!discipline || !topic) return res.status(400).render('error', { message: 'Disciplina e assunto são obrigatórios.' });
@@ -132,11 +126,10 @@ router.post('/plano-estudos/gerar', async (req, res) => {
     const plan = weights.map(target => {
       const aiItem = aiByTarget.get(planKey(target.discipline, target.topic));
       const base = Number(target.priority || target.score || 50);
-      const adjustedPriority = Math.max(1, Math.round(base * (1 - ((target.progress || 0) / 200))));
       return {
         discipline: target.discipline,
         topic: target.topic,
-        priority_score: adjustedPriority,
+        priority_score: Math.max(1, Math.round(base * (1 - ((target.progress || 0) / 200)))),
         rationale: aiItem?.rationale || `${target.editalRequired ? 'Conteúdo obrigatório do edital. ' : ''}Prioridade baseada em recorrência histórica, incidência recente e progresso atual de ${target.progress || 0}%.`,
         study_notes: aiItem?.study_notes || `Estudar teoria de ${target.topic}, resolver questões reais, corrigir erros e revisar em 24h/7 dias.`
       };
