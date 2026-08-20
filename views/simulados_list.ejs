@@ -1,41 +1,5 @@
 <%- include('partials/head') %>
-
-<div class="page-header">
-  <span class="eyebrow">Treino cronometrado</span>
-  <h1>Simulados</h1>
-  <p class="muted">Cada simulado respeita a proporção histórica real de disciplinas da prova (blueprint). Quando faltam questões reais suficientes de uma disciplina, a IA completa com questões inéditas de treino no mesmo estilo — sempre marcadas como <span class="badge-ai">IA</span>.</p>
-</div>
-
-<form method="POST" action="/simulados/novo" style="margin-bottom:24px; display:flex; gap:10px; align-items:flex-end;">
-  <div>
-    <label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Nº de questões</label>
-    <input type="number" name="total" value="50" min="10" max="100">
-  </div>
-  <div>
-    <label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Duração (min)</label>
-    <input type="number" name="duration" value="240" min="30" max="360">
-  </div>
-  <button class="btn" type="submit">Gerar novo simulado</button>
-</form>
-
-<% if (simulados.length === 0) { %>
-  <div class="empty">Nenhum simulado ainda. Gere o primeiro acima.</div>
-<% } else { %>
-  <table>
-    <thead><tr><th>Data</th><th>Questões</th><th>Duração</th><th>Nota</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      <% simulados.forEach(s => { %>
-        <tr>
-          <td class="mono"><%= new Date(s.started_at).toLocaleString('pt-BR') %></td>
-          <td class="mono"><%= s.total_questions %></td>
-          <td class="mono"><%= s.duration_minutes %> min</td>
-          <td class="mono"><%= s.score !== null ? Math.round(s.score) + '%' : '—' %></td>
-          <td><span class="tag <%= s.finished_at ? 'gold' : '' %>"><%= s.finished_at ? 'Concluído' : 'Em andamento' %></span></td>
-          <td><a href="/simulados/<%= s.id %>">Abrir →</a></td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
-<% } %>
-
+<div class="page-header"><span class="eyebrow">Treino cronometrado</span><h1>Simulados</h1><p class="muted">O padrão agora parte de 60 questões, reproduzindo o tamanho das provas importadas. A distribuição segue o histórico real; questões inéditas de treino são usadas apenas como complemento.</p></div>
+<form method="POST" action="/simulados/novo" style="margin-bottom:24px; display:flex; gap:10px; align-items:flex-end;"><div><label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Nº de questões</label><input type="number" name="total" value="60" min="10" max="100"></div><div><label class="muted" style="display:block; font-size:.8rem; margin-bottom:4px;">Duração (min)</label><input type="number" name="duration" value="240" min="30" max="360"></div><button class="btn" type="submit">Gerar novo simulado</button></form>
+<% if (simulados.length === 0) { %><div class="empty">Nenhum simulado ainda. Gere o primeiro acima.</div><% } else { %><table><thead><tr><th>Data</th><th>Questões</th><th>Duração</th><th>Nota</th><th>Status</th><th></th></tr></thead><tbody><% simulados.forEach(s => { %><tr><td class="mono"><%= new Date(s.started_at).toLocaleString('pt-BR') %></td><td class="mono"><%= s.total_questions %></td><td class="mono"><%= s.duration_minutes %> min</td><td class="mono"><%= s.score !== null ? Math.round(s.score) + '%' : '—' %></td><td><span class="tag <%= s.finished_at ? 'gold' : '' %>"><%= s.finished_at ? 'Concluído' : 'Em andamento' %></span></td><td><a href="/simulados/<%= s.id %>">Abrir →</a></td></tr><% }) %></tbody></table><% } %>
 <%- include('partials/foot') %>
