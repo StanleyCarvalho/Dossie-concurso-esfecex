@@ -27,4 +27,9 @@ router.get('/previsao-ia', async (req,res) => {
   res.render('prediction_ai', { prediction, difficultySummary: await getDifficultySummary(req.session.userId) });
 });
 
+router.get('/api/previsao-ia', async (req,res) => {
+  const prediction = await getLatestPrediction(req.session.userId, Number(req.query.year)||2027);
+  res.json(prediction);
+});
+
 module.exports = router;
