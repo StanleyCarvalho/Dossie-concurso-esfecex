@@ -1,0 +1,2 @@
+trigger: 2026-08-20T20:20:00-03:00
+purpose: validate GitHub Actions -> Vercel prebuilt production deployment
