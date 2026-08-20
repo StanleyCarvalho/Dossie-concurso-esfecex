@@ -1,6 +1,119 @@
 <%- include('partials/head', { title: 'Treino por assunto' }) %>
-<div class="page-header"><span class="eyebrow">Fixação ativa</span><h1>Treino por assunto</h1><p class="muted">Resolva questões reais do mesmo assunto; quando necessário, gere questões inéditas calibradas pelo histórico da banca.</p></div>
-<section class="card"><form method="GET" action="/treino" class="filters"><label>Disciplina<input name="discipline" value="<%= discipline %>" required></label><label>Assunto<input name="topic" value="<%= topic %>" required></label><button class="btn" type="submit">Buscar questões</button></form></section>
-<% if(discipline&&topic){ %><section class="card"><div class="section-header"><h2><%= discipline %> · <%= topic %></h2><form method="POST" action="/treino/gerar"><input type="hidden" name="discipline" value="<%= discipline %>"><input type="hidden" name="topic" value="<%= topic %>"><button class="btn secondary" type="submit">Gerar 5 inéditas no padrão</button></form></div><% if(!questions.length){ %><p class="muted">Não há questão real classificada exatamente neste assunto. Você pode gerar treino inédito.</p><% } %><% questions.forEach((q,index)=>{ %><article class="question-card" data-question="<%= q.id %>"><div class="meta"><strong>Questão <%= index+1 %></strong><span><%= q.ano ? 'Prova '+q.ano : 'Treino IA' %></span></div><p><%= q.statement %></p><% ['a','b','c','d','e'].forEach(letter=>{ if(q['alt_'+letter]){ %><label class="alternative"><input type="radio" name="q_<%= q.id %>" value="<%= letter.toUpperCase() %>"> <strong><%= letter.toUpperCase() %>)</strong> <%= q['alt_'+letter] %></label><% } }) %><button class="btn answer-btn" type="button" onclick="answerQuestion(<%= q.id %>, this)">Responder</button><div class="answer-result"></div></article><% }) %></section><% } %>
-<script>async function answerQuestion(id,btn){const card=btn.closest('[data-question]');const picked=card.querySelector('input[type=radio]:checked');if(!picked){card.querySelector('.answer-result').textContent='Selecione uma alternativa.';return;}const r=await fetch('/treino/'+id+'/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({letter:picked.value})});const data=await r.json();card.querySelector('.answer-result').innerHTML=data.correct?'✅ Correto':'❌ Incorreto. Gabarito: <strong>'+data.correctLetter+'</strong>';btn.disabled=true;}</script>
+<div class="page-header">
+  <span class="eyebrow">Fixação ativa</span>
+  <h1>Treino por assunto</h1>
+  <p class="muted">Resolva questões reais do mesmo assunto; após cada resposta, veja o gabarito e a explicação do porquê da alternativa correta.</p>
+</div>
+
+<section class="card">
+  <form method="GET" action="/treino" class="filters">
+    <label>Disciplina<input name="discipline" value="<%= discipline %>" required></label>
+    <label>Assunto<input name="topic" value="<%= topic %>" required></label>
+    <button class="btn" type="submit">Buscar questões</button>
+  </form>
+</section>
+
+<% if(discipline&&topic){ %>
+<section class="card">
+  <div class="section-header">
+    <h2><%= discipline %> · <%= topic %></h2>
+    <form method="POST" action="/treino/gerar">
+      <input type="hidden" name="discipline" value="<%= discipline %>">
+      <input type="hidden" name="topic" value="<%= topic %>">
+      <button class="btn secondary" type="submit">Gerar 5 inéditas no padrão</button>
+    </form>
+  </div>
+
+  <% if(!questions.length){ %><p class="muted">Não há questão real classificada exatamente neste assunto. Você pode gerar treino inédito.</p><% } %>
+
+  <% questions.forEach((q,index)=>{ %>
+  <article class="question-card training-question" data-question="<%= q.id %>">
+    <div class="meta"><strong>Questão <%= index+1 %></strong><span><%= q.ano ? 'Prova '+q.ano : 'Treino IA' %></span></div>
+    <p class="question-statement"><%= q.statement %></p>
+
+    <div class="alternatives-list">
+      <% ['a','b','c','d','e'].forEach(letter=>{ if(q['alt_'+letter]){ %>
+        <label class="alternative" data-letter="<%= letter.toUpperCase() %>">
+          <input type="radio" name="q_<%= q.id %>" value="<%= letter.toUpperCase() %>">
+          <strong><%= letter.toUpperCase() %>)</strong> <span><%= q['alt_'+letter] %></span>
+        </label>
+      <% } }) %>
+    </div>
+
+    <div class="training-actions">
+      <button class="btn answer-btn" type="button" onclick="answerQuestion(<%= q.id %>, this)">Responder</button>
+      <span class="answer-loading" hidden>Gerando correção e explicação...</span>
+    </div>
+
+    <div class="answer-result" aria-live="polite"></div>
+    <div class="answer-explanation" hidden>
+      <div class="explanation-header">
+        <span class="explanation-icon">💡</span>
+        <div><span class="eyebrow">Explicação</span><strong>Entenda esta questão</strong></div>
+      </div>
+      <div class="explanation-text"></div>
+      <div class="explanation-footer">
+        <a class="btn secondary" href="/treino?discipline=<%= encodeURIComponent(q.discipline || discipline) %>&topic=<%= encodeURIComponent(q.topic || topic) %>">Treinar mais deste assunto</a>
+        <a class="btn secondary" href="/caderno-erros">Ver caderno de erros</a>
+      </div>
+    </div>
+  </article>
+  <% }) %>
+</section>
+<% } %>
+
+<script>
+async function answerQuestion(id, btn) {
+  const card = btn.closest('[data-question]');
+  const picked = card.querySelector('input[type=radio]:checked');
+  const resultEl = card.querySelector('.answer-result');
+  const explanationEl = card.querySelector('.answer-explanation');
+  const explanationText = card.querySelector('.explanation-text');
+  const loading = card.querySelector('.answer-loading');
+
+  if (!picked) {
+    resultEl.textContent = 'Selecione uma alternativa antes de responder.';
+    resultEl.className = 'answer-result warning';
+    return;
+  }
+
+  btn.disabled = true;
+  loading.hidden = false;
+  resultEl.textContent = '';
+  explanationEl.hidden = true;
+
+  try {
+    const response = await fetch('/treino/' + id + '/responder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ letter: picked.value })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível corrigir a questão.');
+
+    card.querySelectorAll('.alternative').forEach(label => {
+      const input = label.querySelector('input');
+      input.disabled = true;
+      label.classList.remove('selected-answer', 'correct-answer', 'wrong-answer');
+      if (label.dataset.letter === data.correctLetter) label.classList.add('correct-answer');
+      if (label.dataset.letter === data.chosenLetter) label.classList.add(data.correct ? 'selected-answer' : 'wrong-answer');
+    });
+
+    resultEl.className = 'answer-result ' + (data.correct ? 'success' : 'error');
+    resultEl.textContent = data.correct
+      ? '✅ Correto! Você marcou ' + data.chosenLetter + ', que é o gabarito.'
+      : '❌ Incorreto. Você marcou ' + data.chosenLetter + '. O gabarito correto é ' + data.correctLetter + '.';
+
+    explanationText.textContent = data.explanation || 'Explicação indisponível no momento.';
+    explanationEl.hidden = false;
+    explanationEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (error) {
+    btn.disabled = false;
+    resultEl.className = 'answer-result error';
+    resultEl.textContent = error.message || 'Erro ao corrigir a questão.';
+  } finally {
+    loading.hidden = true;
+  }
+}
+</script>
 <%- include('partials/foot') %>

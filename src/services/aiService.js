@@ -209,11 +209,15 @@ async function generatePracticeQuestions({ discipline, topic, count = 5, example
   return result;
 }
 
-async function explainQuestion(question) {
+async function explainQuestion(question, chosenLetter = null) {
+  const chosen = chosenLetter ? String(chosenLetter).toUpperCase() : null;
+  const correct = String(question.correct_letter || '').toUpperCase();
+  if (!correct) throw new Error('Questão sem gabarito cadastrado.');
+
   return askGemini({
-    system: 'Explique questões de concurso com precisão, objetividade e foco no motivo do erro.',
-    prompt: `${question.statement}\nA) ${question.alt_a}\nB) ${question.alt_b}\nC) ${question.alt_c}\nD) ${question.alt_d}\n${question.alt_e ? `E) ${question.alt_e}` : ''}\nGabarito: ${question.correct_letter}`,
-    maxTokens: 1400
+    system: `Você é um professor de preparação para ESFCEx/VUNESP. Explique usando EXCLUSIVAMENTE o enunciado, alternativas e gabarito fornecidos. Não altere o gabarito, não crie fatos externos desnecessários e não invente referência normativa. Responda em português, de forma didática e objetiva, em texto simples. Estruture exatamente com: "Por que a correta está certa:", "Por que sua resposta está certa/errada:" (quando houver resposta do aluno), "Conceito para fixar:" e "Pegadinha da banca:". Se não houver base suficiente para afirmar algo sobre uma alternativa, diga isso explicitamente.`,
+    prompt: `Disciplina: ${question.discipline || ''}\nAssunto: ${question.topic || ''}\nEnunciado: ${question.statement}\nA) ${question.alt_a || ''}\nB) ${question.alt_b || ''}\nC) ${question.alt_c || ''}\nD) ${question.alt_d || ''}\n${question.alt_e ? `E) ${question.alt_e}` : ''}\nGabarito oficial/cadastrado: ${correct}${chosen ? `\nResposta marcada pelo aluno: ${chosen}` : ''}`,
+    maxTokens: 1800
   });
 }
 
