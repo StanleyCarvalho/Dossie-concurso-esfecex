@@ -1,3 +1,5 @@
+const { canonicalDiscipline, canonicalTopic } = require('./intelligenceEngine');
+
 const DAY_LABELS = {
   mon: 'Segunda', tue: 'Terça', wed: 'Quarta', thu: 'Quinta', fri: 'Sexta', sat: 'Sábado', sun: 'Domingo'
 };
@@ -12,15 +14,19 @@ function norm(value) {
 }
 
 function topicKey(discipline, topic) {
-  return `${norm(discipline)}||${norm(topic)}`;
+  return `${norm(canonicalDiscipline(discipline))}||${norm(canonicalTopic(topic))}`;
 }
 
 function buildStudyQueue({ targets = [], editalTopics = [] }) {
   const byKey = new Map();
   for (const target of targets) {
-    const key = topicKey(target.discipline, target.topic);
+    const discipline = canonicalDiscipline(target.discipline);
+    const topic = canonicalTopic(target.topic);
+    const key = topicKey(discipline, topic);
     byKey.set(key, {
       ...target,
+      discipline,
+      topic,
       sourceType: 'historico',
       priority: Number(target.score || target.priority_score || 50),
       editalRequired: false
@@ -28,18 +34,21 @@ function buildStudyQueue({ targets = [], editalTopics = [] }) {
   }
 
   for (const item of editalTopics) {
-    const key = topicKey(item.discipline, item.topic);
+    const discipline = canonicalDiscipline(item.discipline);
+    const topic = canonicalTopic(item.topic);
+    const key = topicKey(discipline, topic);
     const existing = byKey.get(key);
     if (existing) {
       existing.editalRequired = true;
       existing.sourceType = 'edital+historico';
       existing.priority = Math.min(100, Math.max(existing.priority, 65 + (Number(item.weight || 1) * 10)));
       existing.editalReference = item.reference_text || item.subtopic || null;
+      existing.progress = Math.max(Number(existing.progress || 0), Number(item.progress || 0));
     } else {
       byKey.set(key, {
-        discipline: item.discipline,
-        topic: item.topic,
-        progress: 0,
+        discipline,
+        topic,
+        progress: Number(item.progress || 0),
         score: 60 + (Number(item.weight || 1) * 10),
         priority: 60 + (Number(item.weight || 1) * 10),
         confidence: 'EDITAL',
@@ -47,7 +56,7 @@ function buildStudyQueue({ targets = [], editalTopics = [] }) {
         editalRequired: true,
         editalReference: item.reference_text || item.subtopic || null,
         source: 'Conteúdo oficial do edital',
-        sourceUrl: `/treino?discipline=${encodeURIComponent(item.discipline)}&topic=${encodeURIComponent(item.topic)}`,
+        sourceUrl: `/treino?discipline=${encodeURIComponent(discipline)}&topic=${encodeURIComponent(topic)}`,
         checklist: []
       });
     }
@@ -80,13 +89,12 @@ function buildWeeklySchedule({ targets = [], editalTopics = [], days, hoursPerDa
   const totalWeeklyMinutes = Math.round(studyDays.length * hours * 60);
   const queue = buildStudyQueue({ targets, editalTopics });
   const pending = queue.filter(item => Number(item.progress || 0) < 100);
-
   const totalEdital = queue.filter(item => item.editalRequired).length;
   const editalDone = queue.filter(item => item.editalRequired && Number(item.progress || 0) >= 100).length;
   const editalCoverage = totalEdital ? Math.round((editalDone / totalEdital) * 100) : 0;
 
   if (!studyDays.length || !pending.length) {
-    return { studyDays, hoursPerDay: hours, totalWeeklyMinutes: 0, blocks: [], summary: [], queue, totalEdital, editalDone, editalCoverage, weeksToCover: 0 };
+    return { studyDays, hoursPerDay: hours, totalWeeklyMinutes: 0, blocks: [], summary: [], queue, totalEdital, editalDone, editalCoverage, weeksToCover: 0, pendingTopics: pending.length, scheduledTopics: 0 };
   }
 
   const minBlock = 35;
@@ -99,7 +107,6 @@ function buildWeeklySchedule({ targets = [], editalTopics = [], days, hoursPerDa
   for (const day of studyDays) {
     let remaining = Math.round(hours * 60);
     let slotsLeft = Math.max(1, Math.ceil((weekTargets.length - cursor) / Math.max(1, studyDays.length - studyDays.indexOf(day))));
-
     while (remaining >= minBlock && cursor < weekTargets.length) {
       const target = weekTargets[cursor++];
       const ideal = Math.round(remaining / slotsLeft);
@@ -131,10 +138,7 @@ function buildWeeklySchedule({ targets = [], editalTopics = [], days, hoursPerDa
     current.minutes += block.minutes;
     summaryMap.set(key, current);
   }
-
   const capacityPerWeek = Math.max(1, blocks.length);
-  const weeksToCover = Math.ceil(pending.length / capacityPerWeek);
-
   return {
     studyDays,
     hoursPerDay: hours,
@@ -145,7 +149,7 @@ function buildWeeklySchedule({ targets = [], editalTopics = [], days, hoursPerDa
     totalEdital,
     editalDone,
     editalCoverage,
-    weeksToCover,
+    weeksToCover: Math.ceil(pending.length / capacityPerWeek),
     pendingTopics: pending.length,
     scheduledTopics: new Set(blocks.map(b => topicKey(b.discipline, b.topic))).size
   };
