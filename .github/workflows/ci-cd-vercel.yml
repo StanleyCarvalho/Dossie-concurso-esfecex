@@ -77,32 +77,23 @@ jobs:
         run: npm ci
 
       - name: Verificar token da Vercel
-        id: vercel-token
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "::error::Secret VERCEL_TOKEN não configurado no repositório."
             exit 1
           fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Instalar Vercel CLI
         run: npm install --global vercel@latest
-
-      - name: Validar autenticação Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel whoami --token="$VERCEL_TOKEN"
 
       - name: Vincular projeto Vercel explicitamente
         shell: bash
         run: |
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
-          cat .vercel/project.json
 
       - name: Baixar configurações e variáveis de produção
         env:
