@@ -8,7 +8,7 @@
 
 <section class="card" style="margin-bottom:18px">
   <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap">
-    <div><span class="eyebrow">IA calibrada por evidência</span><h2 style="margin:4px 0">Próximas possíveis cobranças</h2><p class="muted">Cada hipótese deve apontar questões/anos reais e a confiança é limitada pela evidência disponível.</p></div>
+    <div><span class="eyebrow">IA calibrada por evidência</span><h2 style="margin:4px 0">Próximas possíveis cobranças</h2><p class="muted">Cada hipótese traz uma questão inédita completa, com alternativas A–E, baseada em questões e anos reais.</p></div>
     <div><a class="btn" href="/previsao-ia">Abrir previsão completa</a></div>
   </div>
   <div id="ai-prediction-preview" class="grid grid-2" style="margin-top:14px"><div class="empty">Carregando última previsão calibrada...</div></div>
@@ -32,6 +32,13 @@
   <% }) %>
 </div>
 <script>
-(async()=>{const box=document.getElementById('ai-prediction-preview');try{const r=await fetch('/api/previsao-ia?year=2027');const data=await r.json();if(!data.run||!data.items.length){box.innerHTML='<div class="empty">Nenhuma previsão IA calibrada ainda. <a href="/previsao-ia">Gerar agora</a>.</div>';return;}box.innerHTML=data.items.slice(0,6).map(x=>`<article class="card"><div><span class="tag gold">${x.discipline}</span><span class="tag">${x.topic}</span><span class="tag">${x.difficulty} · ${x.estimated_minutes} min</span></div><h3>${x.likely_charge}</h3><p>${x.possible_question||''}</p><p class="muted"><strong>Confiança calibrada:</strong> ${Math.round(x.confidence)}% · anos: ${(x.evidence_years||[]).join(', ')}</p></article>`).join('');}catch(e){box.innerHTML='<div class="empty">Não foi possível carregar a previsão calibrada.</div>';}})();
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderPredictedQuestion(x){
+  const q=x.possible_question_data;
+  if(!q) return '<div class="empty">Questão completa indisponível nesta rodada.</div>';
+  const alternatives=['A','B','C','D','E'].map(letter=>`<div class="predicted-alt"><strong>${letter})</strong> ${esc(q.alternatives[letter])}</div>`).join('');
+  return `<div class="predicted-full-question"><p class="predicted-statement">${esc(q.statement)}</p><div class="predicted-alternatives">${alternatives}</div><details class="predicted-answer"><summary>Ver gabarito e explicação</summary><p><strong>Gabarito: ${esc(q.correct_letter)}</strong></p><p>${esc(q.explanation||'Explicação não informada.')}</p></details></div>`;
+}
+(async()=>{const box=document.getElementById('ai-prediction-preview');try{const r=await fetch('/api/previsao-ia?year=2027');const data=await r.json();if(!data.run||!data.items.length){box.innerHTML='<div class="empty">Nenhuma previsão IA calibrada ainda. <a href="/previsao-ia">Gerar agora</a>.</div>';return;}box.innerHTML=data.items.slice(0,6).map(x=>`<article class="card prediction-preview-card"><div><span class="tag gold">${esc(x.discipline)}</span><span class="tag">${esc(x.topic)}</span><span class="tag">${esc(x.difficulty)} · ${esc(x.estimated_minutes)} min</span></div><h3>${esc(x.likely_charge)}</h3>${renderPredictedQuestion(x)}<p class="muted"><strong>Confiança calibrada:</strong> ${Math.round(Number(x.confidence)||0)}% · anos: ${(x.evidence_years||[]).map(esc).join(', ')}</p></article>`).join('');}catch(e){box.innerHTML='<div class="empty">Não foi possível carregar a previsão calibrada.</div>';}})();
 </script>
 <%- include('partials/foot') %>

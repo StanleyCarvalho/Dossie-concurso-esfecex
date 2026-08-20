@@ -4,7 +4,8 @@ const { calibrateDifficulty, getDifficultySummary, getRepeatedByTopic, generateP
 
 async function ensurePrediction(userId, targetYear) {
   let prediction = await getLatestPrediction(userId, targetYear);
-  if (!prediction.run) {
+  const needsUpgrade = !prediction.run || !prediction.items.length || prediction.items.some(item => !item.possible_question_data);
+  if (needsUpgrade) {
     await generatePredictionRun(userId, targetYear);
     prediction = await getLatestPrediction(userId, targetYear);
   }
