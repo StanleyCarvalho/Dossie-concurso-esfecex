@@ -9,6 +9,7 @@ const db=require('./src/db/db');
 const {router:authRouter,requireAuth}=require('./src/routes/auth');
 const {fixMojibake}=require('./src/services/textService');
 const {ensurePlatformReady}=require('./src/services/platformBootstrap');
+const {ensureChecklistReady}=require('./src/services/checklistBootstrap');
 
 const app=express();
 const PORT=process.env.PORT||3000;
@@ -20,8 +21,8 @@ app.use(express.urlencoded({extended:true}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname,'public')));
 app.use(session({store:new PgStore({pool:db.pool,tableName:'user_sessions',createTableIfMissing:true}),secret:process.env.SESSION_SECRET,proxy:true,resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production'}}));
-app.use(async(req,res,next)=>{try{await ensurePlatformReady();next()}catch(error){next(error)}});
-app.get('/api/health',async(req,res)=>{try{await db.ping();res.json({status:'ok',database:'postgresql',intelligence:'calibrated',accessControl:'enabled'})}catch{res.status(503).json({status:'error',database:'unavailable'})}});
+app.use(async(req,res,next)=>{try{await ensurePlatformReady();await ensureChecklistReady();next()}catch(error){next(error)}});
+app.get('/api/health',async(req,res)=>{try{await db.ping();res.json({status:'ok',database:'postgresql',intelligence:'calibrated',accessControl:'enabled',adaptiveStudy:'enabled'})}catch{res.status(503).json({status:'error',database:'unavailable'})}});
 app.use(async(req,res,next)=>{try{res.locals.markdownToHtml=md=>marked.parse(md||'');res.locals.title='';res.locals.active='';res.locals.t=fixMojibake;res.locals.user=req.session.userId?await db.one('SELECT id,email,name,role,approval_status,access_until FROM users WHERE id=$1',[req.session.userId]):null;next()}catch(e){next(e)}});
 app.use(authRouter);
 app.use(requireAuth);
