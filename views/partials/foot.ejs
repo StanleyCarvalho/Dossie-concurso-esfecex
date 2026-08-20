@@ -1,4 +1,26 @@
   </main>
 </div>
+<script>
+(() => {
+  const body = document.body;
+  const sidebar = document.querySelector('[data-sidebar]');
+  const toggle = document.querySelector('[data-menu-toggle]');
+  const close = document.querySelector('[data-menu-close]');
+  const backdrop = document.querySelector('[data-menu-backdrop]');
+  if (!sidebar || !toggle) return;
+  const setOpen = (open) => {
+    sidebar.classList.toggle('open', open);
+    backdrop?.classList.toggle('open', open);
+    body.classList.toggle('menu-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  toggle.addEventListener('click', () => setOpen(!sidebar.classList.contains('open')));
+  close?.addEventListener('click', () => setOpen(false));
+  backdrop?.addEventListener('click', () => setOpen(false));
+  sidebar.querySelectorAll('a').forEach(link => link.addEventListener('click', () => setOpen(false)));
+  window.addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
+  window.addEventListener('resize', () => { if (window.innerWidth > 860) setOpen(false); });
+})();
+</script>
 </body>
 </html>
