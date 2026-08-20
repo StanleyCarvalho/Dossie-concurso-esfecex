@@ -4,122 +4,72 @@ const DEFAULT_MODEL = 'gemini-3.6-flash';
 const DEPRECATED_MODELS = new Set(['gemini-2.5-flash', 'models/gemini-2.5-flash']);
 const configuredModel = process.env.GEMINI_MODEL || DEFAULT_MODEL;
 const MODEL = DEPRECATED_MODELS.has(configuredModel) ? DEFAULT_MODEL : configuredModel;
-const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.5-flash,gemini-3.5-flash-lite')
-  .split(',')
-  .map(model => model.trim())
-  .filter(Boolean);
-const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.5-flash,gemini-3.5-flash-lite').split(',').map(x => x.trim()).filter(Boolean);
 const PDF_CHUNK_SIZE = Number(process.env.PDF_AI_CHUNK_SIZE) || 18000;
 const PDF_CHUNK_OVERLAP = Number(process.env.PDF_AI_CHUNK_OVERLAP) || 1800;
 const PDF_CHUNK_CONCURRENCY = Number(process.env.PDF_AI_CHUNK_CONCURRENCY) || 3;
+const RETRYABLE = /429|500|502|503|504|Service Unavailable|high demand|temporar/i;
 
 function getClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY não configurada. Defina no arquivo .env (crie uma gratuitamente em aistudio.google.com/apikey)');
-  }
-  return new GoogleGenerativeAI(apiKey);
+  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY não configurada.');
+  return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 }
 
-function getRetryDelayMs(attempt) {
-  return Math.min(1000 * (2 ** attempt), 5000);
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function isRetryableGeminiError(error) {
-  const message = String(error && error.message ? error.message : error);
-  return RETRYABLE_STATUS_CODES.has(error?.status)
-    || /\[(429|500|502|503|504)\b/.test(message)
-    || /Service Unavailable|high demand|temporar/i.test(message);
-}
-
-function describeModelAttempts(errors) {
-  return errors.map(item => `${item.model}: ${item.error.message}`).join(' | ');
-}
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function askGemini({ system, prompt, maxTokens = 4000, json = false }) {
-  const genAI = getClient();
-  const models = [MODEL, ...FALLBACK_MODELS.filter(model => model !== MODEL)];
-  const errors = [];
-
-  for (const modelName of models) {
-    const model = genAI.getGenerativeModel({
+  const client = getClient();
+  let lastError;
+  for (const modelName of [MODEL, ...FALLBACK_MODELS.filter(x => x !== MODEL)]) {
+    const model = client.getGenerativeModel({
       model: modelName,
       systemInstruction: system,
-      generationConfig: {
-        maxOutputTokens: maxTokens,
-        ...(json ? { responseMimeType: 'application/json' } : {})
-      }
+      generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) }
     });
-
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const result = await model.generateContent(prompt);
-        return result.response.text();
+        return (await model.generateContent(prompt)).response.text();
       } catch (error) {
-        errors.push({ model: modelName, error });
-        if (!isRetryableGeminiError(error)) {
-          throw error;
-        }
-        if (attempt < 2) {
-          await sleep(getRetryDelayMs(attempt));
-        }
+        lastError = error;
+        if (!RETRYABLE.test(String(error?.message || error))) throw error;
+        if (attempt < 2) await sleep(Math.min(1000 * (2 ** attempt), 5000));
       }
     }
   }
-
-  throw new Error(`Gemini esta indisponivel ou com alta demanda no momento. Tentativas: ${describeModelAttempts(errors)}`);
+  throw lastError || new Error('IA indisponível.');
 }
 
 function extractJson(text) {
-  if (!text || !text.trim()) {
-    throw new Error('O Gemini retornou uma resposta vazia. Tente importar novamente ou use um PDF com texto selecionavel.');
-  }
-
-  // Remove eventuais cercas de código ```json ... ```
-  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-  const start = cleaned.indexOf('[') === -1
-    ? cleaned.indexOf('{')
-    : (cleaned.indexOf('{') === -1 ? cleaned.indexOf('[') : Math.min(cleaned.indexOf('{'), cleaned.indexOf('[')));
-  const lastCurly = cleaned.lastIndexOf('}');
-  const lastSquare = cleaned.lastIndexOf(']');
-  const end = Math.max(lastCurly, lastSquare);
-  if (start === -1 || end === -1 || end < start) {
-    const preview = cleaned.slice(0, 300);
-    throw new Error(`O Gemini nao retornou JSON valido. Previa da resposta: ${preview || '(vazia)'}`);
-  }
-
-  const slice = cleaned.slice(start, end + 1);
-  try {
-    return JSON.parse(slice);
-  } catch (e) {
-    const looksIncomplete = !slice.endsWith(']') && !slice.endsWith('}');
-    const reason = looksIncomplete ? 'parece incompleto' : 'nao pode ser interpretado';
-    throw new Error(`O Gemini retornou um JSON que ${reason}. Tente novamente; se persistir, importe um PDF menor ou divida a prova em partes.`);
-  }
+  if (!text || !String(text).trim()) throw new Error('A IA retornou uma resposta vazia.');
+  const cleaned = String(text).replace(/```json/gi, '').replace(/```/g, '').trim();
+  const starts = [cleaned.indexOf('['), cleaned.indexOf('{')].filter(x => x >= 0);
+  if (!starts.length) throw new Error('A IA não retornou JSON válido.');
+  const start = Math.min(...starts);
+  const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
+  if (end < start) throw new Error('A IA retornou JSON incompleto.');
+  return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-async function repairJsonResponse(text) {
-  const system = `Voce corrige respostas JSON.
-Receba uma resposta possivelmente invalida ou incompleta e devolva APENAS um array JSON valido.
-Nao adicione markdown, comentarios ou texto fora do JSON.
-Se algum item estiver incompleto demais, descarte esse item em vez de inventar conteudo.`;
-
-  const prompt = `Corrija esta resposta para um array JSON valido:
-${text}`;
-
-  const repaired = await askGemini({ system, prompt, maxTokens: 30000, json: true });
+async function repairJsonResponse(text, expectObject = false) {
+  const shape = expectObject ? 'um objeto JSON válido' : 'um array JSON válido';
+  const repaired = await askGemini({
+    system: `Você corrige JSON. Devolva APENAS ${shape}. Não invente conteúdo ausente; descarte itens irrecuperáveis.`,
+    prompt: String(text || ''),
+    maxTokens: 30000,
+    json: true
+  });
   return extractJson(repaired);
+}
+
+async function parseJsonResponse({ system, prompt, maxTokens = 8000, expectObject = false }) {
+  const text = await askGemini({ system, prompt, maxTokens, json: true });
+  try { return extractJson(text); } catch { return repairJsonResponse(text, expectObject); }
 }
 
 function splitPdfText(rawText, chunkSize = PDF_CHUNK_SIZE, overlap = PDF_CHUNK_OVERLAP) {
   const text = String(rawText || '').replace(/\r\n/g, '\n').trim();
   if (!text) return [];
   if (text.length <= chunkSize) return [text];
-
   const chunks = [];
   let start = 0;
   while (start < text.length) {
@@ -135,202 +85,101 @@ function splitPdfText(rawText, chunkSize = PDF_CHUNK_SIZE, overlap = PDF_CHUNK_O
   return chunks;
 }
 
-function questionKey(question) {
-  const number = Number(question?.number);
-  if (Number.isFinite(number) && number > 0) return `number:${number}`;
-  const statement = String(question?.statement || '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 180);
+function questionKey(q) {
+  const number = Number(q?.number);
+  if (Number.isInteger(number) && number > 0) return `number:${number}`;
+  const statement = String(q?.statement || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 180);
   return statement ? `statement:${statement}` : null;
 }
 
 function mergeQuestionBatches(batches) {
   const byKey = new Map();
-  let anonymousIndex = 0;
+  let anonymous = 0;
   for (const question of batches.flat()) {
     if (!question || typeof question !== 'object') continue;
-    const key = questionKey(question) || `anonymous:${anonymousIndex++}`;
+    const key = questionKey(question) || `anonymous:${anonymous++}`;
     const current = byKey.get(key);
-    if (!current || JSON.stringify(question).length > JSON.stringify(current).length) {
-      byKey.set(key, question);
-    }
+    if (!current || JSON.stringify(question).length > JSON.stringify(current).length) byKey.set(key, question);
   }
-  return [...byKey.values()].sort((a, b) => {
-    const aNumber = Number(a.number);
-    const bNumber = Number(b.number);
-    if (!Number.isFinite(aNumber)) return 1;
-    if (!Number.isFinite(bNumber)) return -1;
-    return aNumber - bNumber;
-  });
+  return [...byKey.values()].sort((a, b) => (Number(a.number) || 999) - (Number(b.number) || 999));
 }
 
 function normalizeExpectedQuestions(questions, expectedQuestions) {
   const expected = Number(expectedQuestions);
-  if (!Number.isInteger(expected) || expected < 1) return mergeQuestionBatches([questions]);
-
-  return mergeQuestionBatches([questions])
-    .map(question => ({ ...question, number: Number(question.number) }))
-    .filter(question => Number.isInteger(question.number) && question.number >= 1 && question.number <= expected);
+  const merged = mergeQuestionBatches([questions]);
+  if (!Number.isInteger(expected) || expected < 1) return merged;
+  return merged.map(q => ({ ...q, number: Number(q.number) })).filter(q => Number.isInteger(q.number) && q.number >= 1 && q.number <= expected);
 }
 
 function getMissingQuestionNumbers(questions, expectedQuestions) {
-  const found = new Set(questions.map(question => Number(question.number)));
-  return Array.from({ length: expectedQuestions }, (_, index) => index + 1)
-    .filter(number => !found.has(number));
+  const found = new Set(questions.map(q => Number(q.number)));
+  return Array.from({ length: expectedQuestions }, (_, i) => i + 1).filter(n => !found.has(n));
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
-  let nextIndex = 0;
-  const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, items.length));
+  let next = 0;
   async function worker() {
-    while (nextIndex < items.length) {
-      const index = nextIndex++;
+    while (next < items.length) {
+      const index = next++;
       results[index] = await mapper(items[index], index);
     }
   }
-  await Promise.all(Array.from({ length: workerCount }, worker));
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(Number(concurrency) || 1, items.length)) }, worker));
   return results;
 }
 
-/**
- * Recebe o texto bruto extraído de um PDF de prova (+ gabarito, se disponível)
- * e devolve um array estruturado de questões.
- */
 async function parsePdfToQuestions(rawText, meta = {}) {
-  const system = `Você é um extrator de dados especializado em provas de concurso público brasileiro.
-Sua única tarefa é converter o texto bruto de uma prova (extraído de PDF, pode ter quebras de linha/OCR imperfeitas) em uma lista estruturada de questões em JSON.
-Responda APENAS com um array JSON válido, sem nenhum texto antes ou depois, sem markdown.
-Cada item deve ter exatamente estes campos:
-{
-  "number": <número da questão>,
-  "discipline": "<disciplina, ex: Português, Programação, Redes de Computadores, Banco de Dados, Segurança da Informação, Sistemas Operacionais, Arquitetura de Computadores, Engenharia de Software, Governança de TI, Gerência de Projetos, Algoritmos e Estrutura de Dados, Telecomunicações, História, Geografia>",
-  "topic": "<assunto específico dentro da disciplina>",
-  "statement": "<enunciado completo da questão>",
-  "alt_a": "<texto da alternativa A>",
-  "alt_b": "...",
-  "alt_c": "...",
-  "alt_d": "...",
-  "alt_e": "... (ou null se a prova só tiver A-D)",
-  "correct_letter": "<A-E, ou null se o gabarito não estiver no texto>",
-  "style_notes": "<observação curta sobre o estilo/pegadinha da questão, útil para detectar padrões da banca>"
-}
-Se não conseguir identificar algum campo com segurança, use null. Não invente conteúdo que não está no texto.`;
-
+  const expectedQuestions = Number(meta.expectedQuestions || 60);
+  const system = `Você é um extrator especializado em provas brasileiras. Preserve literalmente enunciado e alternativas. Responda APENAS array JSON com: number, discipline, topic, statement, alt_a, alt_b, alt_c, alt_d, alt_e, correct_letter, style_notes. Não invente conteúdo; use null quando incerto.`;
   const chunks = splitPdfText(rawText);
-  if (!chunks.length) {
-    throw new Error('O PDF não contém texto extraível. Use um PDF com texto selecionável ou aplique OCR antes de importar.');
-  }
-
-  console.log(JSON.stringify({
-    level: 'info',
-    message: 'pdf_ai_extraction_started',
-    textLength: String(rawText || '').length,
-    chunks: chunks.length
-  }));
-
-  const parseResponse = async (prompt, maxTokens = 16000) => {
-    const text = await askGemini({ system, prompt, maxTokens, json: true });
-    let questions;
-    try {
-      questions = extractJson(text);
-    } catch (error) {
-      questions = await repairJsonResponse(text);
-    }
-    if (!Array.isArray(questions)) throw new Error('O Gemini não retornou uma lista de questões.');
-    return questions;
-  };
+  if (!chunks.length) throw new Error('O PDF não contém texto extraível.');
 
   const batches = await mapWithConcurrency(chunks, PDF_CHUNK_CONCURRENCY, async (chunk, index) => {
-    const prompt = `Metadados da prova: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}.
-
-Este é o trecho ${index + 1} de ${chunks.length} do PDF. Extraia TODAS as questões completas visíveis neste trecho.
-O texto possui sobreposição com os trechos vizinhos; não invente partes ausentes. Questões repetidas serão eliminadas depois.
-
-Texto extraído do PDF:
-"""
-${chunk}
-"""
-
-Devolva todas as questões completas identificadas no formato JSON especificado.`;
-
-    const questions = await parseResponse(prompt);
-    console.log(JSON.stringify({
-      level: 'info',
-      message: 'pdf_ai_chunk_completed',
-      chunk: index + 1,
-      totalChunks: chunks.length,
-      questions: questions.length
-    }));
+    const questions = await parseJsonResponse({
+      system,
+      prompt: `Metadados: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}. Este é o trecho ${index + 1}/${chunks.length}. Extraia TODAS as questões completas visíveis. Há sobreposição entre trechos, então não invente partes ausentes.\n\n${chunk}`,
+      maxTokens: 16000
+    });
+    if (!Array.isArray(questions)) throw new Error('A IA não retornou uma lista de questões.');
     return questions;
   });
 
-  const expectedQuestions = Number(meta.expectedQuestions);
   let questions = normalizeExpectedQuestions(mergeQuestionBatches(batches), expectedQuestions);
-
   if (Number.isInteger(expectedQuestions) && expectedQuestions > 0) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       const missing = getMissingQuestionNumbers(questions, expectedQuestions);
       if (!missing.length) break;
-
-      console.log(JSON.stringify({
-        level: 'info',
-        message: 'pdf_ai_missing_questions_recovery_started',
-        attempt,
-        missing
-      }));
-
-      const recoveryPrompt = `Metadados da prova: banca ${meta.banca || 'VUNESP'}, órgão ${meta.orgao || 'ESFCEx'}, cargo ${meta.cargo || 'Informática'}, ano ${meta.ano || ''}.
-
-A prova deve conter exatamente ${expectedQuestions} questões numeradas de 1 a ${expectedQuestions}.
-Já foram encontradas as demais questões. Extraia SOMENTE estas questões ausentes: ${missing.join(', ')}.
-Não renumere questões e não inclua instruções, exemplos, textos auxiliares ou questões com outros números.
-
-Texto integral extraído do PDF:
-"""
-${String(rawText || '').slice(0, 140000)}
-"""
-
-Devolva um array JSON apenas com as questões solicitadas e todos os campos do formato especificado.`;
-
-      const recovered = await parseResponse(recoveryPrompt, Math.min(16000, Math.max(4000, missing.length * 1800)));
-      questions = normalizeExpectedQuestions([...questions, ...recovered], expectedQuestions);
+      const recovered = await parseJsonResponse({
+        system,
+        prompt: `A prova deve conter exatamente ${expectedQuestions} questões numeradas de 1 a ${expectedQuestions}. Extraia SOMENTE estas ausentes: ${missing.join(', ')}. Não renumere e não inclua instruções ou exemplos. Texto integral:\n${String(rawText || '').slice(0, 140000)}`,
+        maxTokens: Math.min(16000, Math.max(4000, missing.length * 1800))
+      });
+      if (Array.isArray(recovered)) questions = normalizeExpectedQuestions([...questions, ...recovered], expectedQuestions);
     }
-
     const missing = getMissingQuestionNumbers(questions, expectedQuestions);
     if (missing.length || questions.length !== expectedQuestions) {
-      throw new Error(`Importação incompleta: foram identificadas ${questions.length} de ${expectedQuestions} questões. Números ausentes: ${missing.join(', ') || 'nenhum'}. Nenhum dado foi gravado; verifique se o PDF possui texto selecionável e tente novamente.`);
+      throw new Error(`Importação incompleta: foram identificadas ${questions.length} de ${expectedQuestions} questões. Números ausentes: ${missing.join(', ') || 'nenhum'}. Nenhum dado deve ser gravado.`);
     }
   }
-  console.log(JSON.stringify({
-    level: 'info',
-    message: 'pdf_ai_extraction_completed',
-    chunks: chunks.length,
-    questions: questions.length
-  }));
   return questions;
 }
 
-/**
- * Gera um relatório de padrões da banca com base nas estatísticas agregadas
- * (disciplinas, pesos, assuntos por ano) já salvas no banco.
- */
+async function parseEdital(rawText, meta = {}) {
+  const system = `Você é um auditor de edital de concurso. Extraia SOMENTE conteúdos programáticos explicitamente presentes. Responda apenas JSON no formato {summary,topics:[{discipline,topic,subtopic,reference_text,weight}]}. weight: 1 item comum, 1.5 item enfatizado/repetido, 2 item explicitamente central. Não invente conteúdo.`;
+  const result = await parseJsonResponse({
+    system,
+    prompt: `Edital ESFCEx ${meta.ano || ''}; cargo ${meta.cargo || 'Informática'}; banca ${meta.banca || 'VUNESP'}. Extraia a matriz objetiva de estudo:\n${String(rawText || '').slice(0, 150000)}`,
+    maxTokens: 12000,
+    expectObject: true
+  });
+  if (!result || typeof result !== 'object' || !Array.isArray(result.topics)) throw new Error('Não foi possível extrair a matriz do edital.');
+  return result;
+}
+
 async function generatePatternReport(statsSummary) {
-  const system = `Você é um analista especializado em estatística de bancas de concurso público no Brasil (padrão de incidência de temas, estilo de redação de questões, tendências históricas).
-Seu trabalho é analisar dados históricos de uma banca (VUNESP) para um cargo específico (Informática, ESFCEx) e produzir:
-1. Um relatório em Markdown, direto e objetivo, sobre os padrões identificados (disciplinas mais cobradas, tendência de crescimento/queda por área, estilo típico de questão da banca, disciplinas "decorativas" vs "decisivas").
-2. Ao final, um bloco JSON (dentro de \`\`\`json) com a chave "predicted_weights_2027": um array de objetos {discipline, estimated_questions, confidence} representando uma ESTIMATIVA PROBABILÍSTICA de peso por disciplina para a próxima prova — deixe claro no relatório que isso é uma projeção estatística baseada em tendência histórica, e não uma previsão de questões literais. Nunca afirme que questões exatas vão se repetir.
-Seja honesto sobre limitações quando os dados históricos forem parciais.`;
-
-  const prompt = `Dados históricos agregados (JSON):
-${JSON.stringify(statsSummary, null, 2)}
-
-Gere o relatório de padrões conforme instruído.`;
-
-  const text = await askGemini({ system, prompt, maxTokens: 4000 });
-
+  const system = `Analise provas VUNESP/ESFCEx por evidência histórica. Produza relatório Markdown e, ao final, bloco JSON predicted_weights_2027. Diferencie dado histórico, tendência e hipótese; nunca prometa questões literais.`;
+  const text = await askGemini({ system, prompt: JSON.stringify(statsSummary, null, 2), maxTokens: 5000 });
   let weights = [];
   try {
     const match = text.match(/```json([\s\S]*?)```/);
@@ -338,93 +187,34 @@ Gere o relatório de padrões conforme instruído.`;
       const parsed = JSON.parse(match[1].trim());
       weights = parsed.predicted_weights_2027 || parsed;
     }
-  } catch (e) {
-    weights = [];
-  }
-
+  } catch {}
   return { content_md: text, weights };
 }
 
-/**
- * Gera um plano de estudos priorizado a partir dos pesos históricos
- * e do desempenho do usuário em simulados.
- */
 async function generateStudyPlan({ weights, performance, report = null }) {
-  const system = `Você é um orientador de estudos para concursos militares (ESFCEx, cargo Informática).
-Com base no peso histórico de cada disciplina/assunto na banca VUNESP e no desempenho do candidato em simulados, gere um plano de estudos priorizado.
-Responda APENAS com um array JSON, sem texto fora do JSON, no formato:
-[
-  {
-    "discipline": "...",
-    "topic": "...",
-    "priority_score": <0-100>,
-    "rationale": "<por que essa prioridade, cite peso histórico e/ou desempenho fraco>",
-    "study_notes": "<resumo de estudo objetivo, 3-6 frases, direto ao ponto, focado no que a banca cobra>"
-  }
-]
-Use somente combinações de disciplina e assunto presentes na matriz objetiva fornecida. Não invente assuntos fora dela.
-Ordene do maior para o menor priority_score. Gere entre 10 e 20 itens cobrindo as prioridades reais da matriz.`;
-
-  const prompt = `Pesos históricos/estimados por disciplina:
-${JSON.stringify(weights, null, 2)}
-
-Desempenho do candidato em simulados (pode estar vazio se ainda não fez nenhum):
-${JSON.stringify(performance, null, 2)}
-
-Último relatório de padrões salvo (pode estar vazio):
-${report ? JSON.stringify({ content: report.content_md, weights: report.weights_json }, null, 2) : 'Nenhum relatório salvo.'}
-
-Gere o plano priorizando: incidência histórica, presença nos anos recentes, peso previsto no relatório, erros em simulados e assuntos ainda não concluídos pelo candidato.`;
-
-  const text = await askGemini({ system, prompt, maxTokens: 8000, json: true });
-  try {
-    return extractJson(text);
-  } catch (e) {
-    return repairJsonResponse(text);
-  }
+  const system = `Você é um orientador ESFCEx. Responda APENAS array JSON com discipline, topic, priority_score, rationale e study_notes. Use somente os assuntos fornecidos. Priorize incidência, recência, erros e baixo domínio.`;
+  const result = await parseJsonResponse({ system, prompt: JSON.stringify({ weights, performance, report }), maxTokens: 8000 });
+  if (!Array.isArray(result)) throw new Error('Plano de estudos inválido.');
+  return result;
 }
 
-/**
- * Gera questões inéditas de treino no estilo da banca para uma disciplina/assunto.
- * Deixado claro para o usuário que são questões DE TREINO geradas por IA,
- * não questões reais nem previsões literais da prova.
- */
-async function generatePracticeQuestions({ discipline, topic, count = 5 }) {
-  const system = `Você cria questões de múltipla escolha de treino, no estilo de prova da banca VUNESP para concursos militares (ESFCEx, cargo Informática).
-As questões devem ser INÉDITAS (não copiar questões reais), mas reproduzir o nível de dificuldade, formato e "pegadinhas" típicas dessa banca.
-Responda APENAS com um array JSON no formato:
-[
-  {
-    "discipline": "...",
-    "topic": "...",
-    "statement": "...",
-    "alt_a": "...", "alt_b": "...", "alt_c": "...", "alt_d": "...", "alt_e": "...",
-    "correct_letter": "A-E",
-    "explanation": "<explicação objetiva da resposta correta e por que as outras estão erradas>"
-  }
-]`;
-  const prompt = `Gere ${count} questões inéditas de treino sobre "${topic}" (disciplina: ${discipline}), nível concurso público superior, estilo VUNESP.`;
-  const text = await askGemini({ system, prompt, maxTokens: 8000, json: true });
-  try {
-    return extractJson(text);
-  } catch (e) {
-    return repairJsonResponse(text);
-  }
+async function generatePracticeQuestions({ discipline, topic, count = 5, examples = [] }) {
+  const system = `Você atua como elaborador de questões INÉDITAS de treino no estilo VUNESP/ESFCEx. Calibre profundidade, comando, distratores e pegadinhas pelos exemplos históricos, mas nunca copie frases, valores, alternativas ou enunciados. Responda apenas array JSON com discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation.`;
+  const result = await parseJsonResponse({
+    system,
+    prompt: `Disciplina: ${discipline}; assunto: ${topic}; quantidade: ${count}. Exemplos históricos para calibrar estilo:\n${JSON.stringify(examples.slice(0, 8), null, 2)}`,
+    maxTokens: 10000
+  });
+  if (!Array.isArray(result)) throw new Error('Treino gerado em formato inválido.');
+  return result;
 }
 
 async function explainQuestion(question) {
-  const system = `Você explica questões de concurso de forma clara e objetiva, no nível de um professor de cursinho preparatório.`;
-  const prompt = `Questão (disciplina: ${question.discipline}, assunto: ${question.topic}):
-${question.statement}
-A) ${question.alt_a}
-B) ${question.alt_b}
-C) ${question.alt_c}
-D) ${question.alt_d}
-${question.alt_e ? 'E) ' + question.alt_e : ''}
-Gabarito: ${question.correct_letter}
-
-Explique por que a alternativa correta está certa e, brevemente, por que as principais alternativas erradas não servem.`;
-  return askGemini({ system, prompt, maxTokens: 1200 });
+  return askGemini({
+    system: 'Explique questões de concurso com precisão, objetividade e foco no motivo do erro.',
+    prompt: `${question.statement}\nA) ${question.alt_a}\nB) ${question.alt_b}\nC) ${question.alt_c}\nD) ${question.alt_d}\n${question.alt_e ? `E) ${question.alt_e}` : ''}\nGabarito: ${question.correct_letter}`,
+    maxTokens: 1400
+  });
 }
 
 module.exports = {
@@ -433,6 +223,7 @@ module.exports = {
   mergeQuestionBatches,
   normalizeExpectedQuestions,
   getMissingQuestionNumbers,
+  parseEdital,
   generatePatternReport,
   generateStudyPlan,
   generatePracticeQuestions,

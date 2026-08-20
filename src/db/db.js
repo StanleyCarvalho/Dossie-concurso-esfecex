@@ -4,12 +4,23 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL não configurada. Informe a conexão PostgreSQL do Neon.');
 }
 
+function normalizedConnectionString() {
+  try {
+    const url = new URL(process.env.DATABASE_URL);
+    if (process.env.NODE_ENV === 'production') {
+      url.searchParams.set('sslmode', 'verify-full');
+    }
+    return url.toString();
+  } catch {
+    return process.env.DATABASE_URL;
+  }
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: normalizedConnectionString(),
   max: Number(process.env.DB_POOL_MAX) || 5,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+  connectionTimeoutMillis: 10000
 });
 
 async function query(text, params = [], client = pool) {
