@@ -1,0 +1,6 @@
+<%- include('partials/head', { title: 'Dificuldade das questões' }) %>
+<div class="page-header"><span class="eyebrow">Calibração da banca</span><h1>Dificuldade das questões</h1><p class="muted">A IA classifica cada questão real usando enunciado, alternativas, cálculos, código, profundidade e número de etapas. Questões estimadas acima de 20 minutos são marcadas como <strong>impossível</strong>.</p></div>
+<div class="grid grid-4"><% summary.forEach(s=>{ %><div class="card"><span class="eyebrow"><%= s.difficulty %></span><h2><%= s.total %></h2><p class="muted">média <%= s.avg_minutes %> min</p></div><% }) %></div>
+<form method="POST" action="/dificuldade/calibrar" style="margin-top:20px"><button class="btn" type="submit">Analisar próximo lote com IA</button><span class="muted" style="margin-left:10px">A análise é persistida e não é refeita sem necessidade.</span></form>
+<div class="card" style="margin-top:20px"><h3>Critério</h3><p class="muted">Fácil: resolução direta. Médio: exige interpretação/aplicação. Difícil: múltiplas etapas, cálculo, código ou conceito profundo. Impossível: estimativa superior a 20 minutos. A classificação é uma estimativa de esforço, não uma propriedade absoluta da questão.</p></div>
+<%- include('partials/foot') %>
