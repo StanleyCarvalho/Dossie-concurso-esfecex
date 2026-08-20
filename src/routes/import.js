@@ -39,7 +39,7 @@ router.post('/', upload.single('provaPdf'), async (req, res) => {
     await db.transaction(async client => {
       for (const q of questions) {
         const discipline = q.discipline || 'Não classificado';
-        await client.query(`INSERT INTO questions (exam_id,number,discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,style_notes,source,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'import',$13)`, [examId,q.number||null,discipline,q.topic||null,q.statement||'',q.alt_a||null,q.alt_b||null,q.alt_c||null,q.alt_d||null,q.alt_e||null,q.correct_letter||null,q.style_notes||null,req.session.userId]);
+        await client.query(`INSERT INTO questions (exam_id,number,discipline,topic,context_title,context_text,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,style_notes,source,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'import',$15)`, [examId,q.number||null,discipline,q.topic||null,q.context_title||null,q.context_text||null,q.statement||'',q.alt_a||null,q.alt_b||null,q.alt_c||null,q.alt_d||null,q.alt_e||null,q.correct_letter||null,q.style_notes||null,req.session.userId]);
         disciplineCounts[discipline]=(disciplineCounts[discipline]||0)+1;
         if(q.topic){disciplineTopics[discipline]=disciplineTopics[discipline]||{};disciplineTopics[discipline][q.topic]=(disciplineTopics[discipline][q.topic]||0)+1;}
       }
