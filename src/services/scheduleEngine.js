@@ -11,12 +11,23 @@ function buildStudyQueue({targets=[],editalTopics=[],adaptiveSignals=[]}){
   return [...byKey.values()].sort((a,b)=>{const aDone=Number(a.progress||0)>=100?1:0,bDone=Number(b.progress||0)>=100?1:0;if(aDone!==bDone)return aDone-bDone;if(a.editalRequired!==b.editalRequired)return a.editalRequired?-1:1;return Number(b.priority||0)-Number(a.priority||0);});
 }
 function buildDailyTasks(target,minutes){const learning=Math.max(15,Math.round(minutes*.45)),questions=Math.max(10,Math.round(minutes*.35)),review=Math.max(10,minutes-learning-questions);return [`Teoria focada nos microtópicos mais cobrados (${learning} min)`,`Questões históricas e inéditas calibradas (${questions} min)`,`Correção ativa + revisão dos erros (${review} min)`,'Marcar o checklist do dia para recalibrar a próxima semana'];}
+function selectBalancedWeekTargets(pending,maxBlocks){
+  if(maxBlocks<=0)return[];
+  const groups=new Map();
+  pending.forEach(item=>{const key=norm(item.discipline)||'outros';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);});
+  const groupList=[...groups.values()].map(items=>items.sort((a,b)=>Number(b.priority||0)-Number(a.priority||0))).sort((a,b)=>Number(b[0]?.priority||0)-Number(a[0]?.priority||0));
+  const selected=[];const used=new Set();
+  for(const group of groupList){if(selected.length>=maxBlocks)break;const item=group.shift();if(item){selected.push(item);used.add(topicKey(item.discipline,item.topic));}}
+  const remaining=groupList.flat().filter(item=>!used.has(topicKey(item.discipline,item.topic))).sort((a,b)=>{if(a.editalRequired!==b.editalRequired)return a.editalRequired?-1:1;return Number(b.priority||0)-Number(a.priority||0);});
+  for(const item of remaining){if(selected.length>=maxBlocks)break;selected.push(item);}
+  return selected;
+}
 function buildWeeklySchedule({targets=[],editalTopics=[],days,hoursPerDay,adaptiveSignals=[]}){
   const studyDays=normalizeDays(days),hours=Math.max(.5,Math.min(12,Number(hoursPerDay)||2)),totalWeeklyMinutes=Math.round(studyDays.length*hours*60),queue=buildStudyQueue({targets,editalTopics,adaptiveSignals}),pending=queue.filter(item=>Number(item.progress||0)<100),totalEdital=queue.filter(i=>i.editalRequired).length,editalDone=queue.filter(i=>i.editalRequired&&Number(i.progress||0)>=100).length,editalCoverage=totalEdital?Math.round(editalDone/totalEdital*100):0;
   if(!studyDays.length||!pending.length)return{studyDays,hoursPerDay:hours,totalWeeklyMinutes:0,blocks:[],summary:[],queue,totalEdital,editalDone,editalCoverage,weeksToCover:0,pendingTopics:pending.length,scheduledTopics:0};
-  const minBlock=35,maxBlock=90,maxBlocks=Math.max(studyDays.length,Math.floor(totalWeeklyMinutes/minBlock)),weekTargets=pending.slice(0,maxBlocks),blocks=[];let cursor=0;
+  const minBlock=35,maxBlock=90,maxBlocks=Math.max(studyDays.length,Math.floor(totalWeeklyMinutes/minBlock)),weekTargets=selectBalancedWeekTargets(pending,maxBlocks),blocks=[];let cursor=0;
   for(const day of studyDays){let remaining=Math.round(hours*60),slotsLeft=Math.max(1,Math.ceil((weekTargets.length-cursor)/Math.max(1,studyDays.length-studyDays.indexOf(day))));while(remaining>=minBlock&&cursor<weekTargets.length){const target=weekTargets[cursor++],ideal=Math.round(remaining/slotsLeft),minutes=Math.max(minBlock,Math.min(maxBlock,ideal,remaining));blocks.push({day,dayLabel:DAY_LABELS[day],minutes,discipline:target.discipline,topic:target.topic,score:target.priority||target.score||50,confidence:target.confidence||(target.editalRequired?'EDITAL':'HISTÓRICO'),source:target.source||'Material focado do assunto',sourceUrl:target.sourceUrl||`/treino?discipline=${encodeURIComponent(target.discipline)}&topic=${encodeURIComponent(target.topic)}`,progress:Number(target.progress||0),editalRequired:!!target.editalRequired,sourceType:target.sourceType,tasks:buildDailyTasks(target,minutes),adaptiveSignal:target.adaptiveSignal||null});remaining-=minutes;slotsLeft=Math.max(1,slotsLeft-1);}}
   const summaryMap=new Map();for(const block of blocks){const key=topicKey(block.discipline,block.topic),current=summaryMap.get(key)||{discipline:block.discipline,topic:block.topic,minutes:0,score:block.score,editalRequired:block.editalRequired};current.minutes+=block.minutes;summaryMap.set(key,current);}const capacityPerWeek=Math.max(1,blocks.length);
   return{studyDays,hoursPerDay:hours,totalWeeklyMinutes,blocks,summary:[...summaryMap.values()].sort((a,b)=>b.minutes-a.minutes),queue,totalEdital,editalDone,editalCoverage,weeksToCover:Math.ceil(pending.length/capacityPerWeek),pendingTopics:pending.length,scheduledTopics:new Set(blocks.map(b=>topicKey(b.discipline,b.topic))).size};
 }
-module.exports={buildWeeklySchedule,buildStudyQueue,DAY_LABELS};
+module.exports={buildWeeklySchedule,buildStudyQueue,selectBalancedWeekTargets,DAY_LABELS};
