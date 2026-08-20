@@ -1,88 +1,37 @@
 <%- include('partials/head') %>
 
 <div class="page-header">
-  <span class="eyebrow">Possivel proxima prova</span>
-  <h1>Prova-modelo completa - 60 questoes</h1>
-  <p class="muted">Esta pagina monta a prova mais provavel pelo padrao historico importado: peso por disciplina, recorrencia de assunto, presenca recente e questoes reais no banco. Ano-base atual: <strong><%= projectedExam.baseYear || 'sem prova completa' %></strong>.</p>
+  <span class="eyebrow">Possível próxima prova</span>
+  <h1>Prova-modelo completa - 60 questões</h1>
+  <p class="muted">Combina distribuição histórica, recorrência, edital, dificuldade e hipóteses calibradas por IA. Ano-base atual: <strong><%= projectedExam.baseYear || 'sem prova completa' %></strong>.</p>
 </div>
 
-<div class="grid grid-2" style="align-items:start; margin-bottom:18px;">
-  <div class="card">
-    <h3>Distribuicao prevista</h3>
-    <% projectedExam.distribution.forEach(d => { %>
-      <div class="bar-row">
-        <span class="name"><%= t(d.discipline) %></span>
-        <span class="bar-track"><span class="bar-fill" style="width:<%= Math.round(d.proportion * 100) %>%"></span></span>
-        <span class="pct"><%= d.target %>q</span>
-      </div>
-    <% }) %>
+<section class="card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap">
+    <div><span class="eyebrow">IA calibrada por evidência</span><h2 style="margin:4px 0">Próximas possíveis cobranças</h2><p class="muted">Cada hipótese deve apontar questões/anos reais e a confiança é limitada pela evidência disponível.</p></div>
+    <div><a class="btn" href="/previsao-ia">Abrir previsão completa</a></div>
   </div>
+  <div id="ai-prediction-preview" class="grid grid-2" style="margin-top:14px"><div class="empty">Carregando última previsão calibrada...</div></div>
+</section>
 
-  <div class="card">
-    <h3>Regra de uso</h3>
-    <p class="muted" style="font-size:.88rem;">Estude apenas o assunto foco de cada linha. Se o link abrir uma lista de videos, escolha os resultados mais recentes e diretamente ligados ao termo pesquisado. Depois resolva questoes reais da disciplina e marque o progresso.</p>
-    <p class="muted" style="font-size:.82rem;"><strong>Precisao:</strong> a prova futura nao pode ser garantida literalmente, mas esta matriz evita estudo disperso e prioriza o que o historico indica com maior forca.</p>
-  </div>
+<div class="grid grid-2" style="align-items:start; margin-bottom:18px;">
+  <div class="card"><h3>Distribuição prevista</h3><% projectedExam.distribution.forEach(d => { %><div class="bar-row"><span class="name"><%= t(d.discipline) %></span><span class="bar-track"><span class="bar-fill" style="width:<%= Math.round(d.proportion * 100) %>%"></span></span><span class="pct"><%= d.target %>q</span></div><% }) %></div>
+  <div class="card"><h3>Regra de uso</h3><p class="muted" style="font-size:.88rem;">Priorize os assuntos de maior recorrência e resolva as questões históricas ligadas à evidência. Use a previsão como priorização, não como certeza literal.</p><p class="muted" style="font-size:.82rem;"><strong>Precisão:</strong> o sistema bloqueia previsões sem suporte histórico/edital e limita a confiança quando há pouca evidência.</p></div>
 </div>
 
 <div class="next-exam-list">
   <% projectedExam.slots.forEach(slot => { %>
     <article class="question-card next-slot">
-      <div class="next-slot-head">
-        <div>
-          <span class="tag mono">Q<%= String(slot.number).padStart(2, '0') %></span>
-          <span class="tag gold"><%= t(slot.discipline) %></span>
-          <span class="tag"><%= slot.confidence %></span>
-        </div>
-        <strong class="next-score"><%= slot.score %></strong>
-      </div>
-
-      <h3><%= t(slot.topic) %></h3>
-      <p class="muted" style="font-size:.86rem;"><%= t(slot.reason) %></p>
-
-      <div class="predicted-question">
-        <span class="eyebrow" style="margin-bottom:2px;">Possivel questao</span>
-        <strong><%= t(slot.likelyQuestion.charge) %></strong>
-        <p><%= t(slot.likelyQuestion.stem) %></p>
-        <p class="muted"><strong>Pegadinha provavel:</strong> <%= t(slot.likelyQuestion.trap) %></p>
-        <p class="muted mono" style="font-size:.74rem;"><%= t(slot.likelyQuestion.evidence) %></p>
-      </div>
-
-      <div class="next-study">
-        <div>
-          <span class="eyebrow" style="margin-bottom:2px;">Onde estudar</span>
-          <a href="<%= slot.sourceUrl %>" target="_blank" rel="noopener"><%= slot.directLesson ? 'Videoaula direta' : 'Busca focada' %>: <%= t(slot.source) %> - <%= t(slot.topic) %></a>
-        </div>
-        <div>
-          <span class="eyebrow" style="margin-bottom:2px;">Revisao objetiva</span>
-          <ul>
-            <% slot.checklist.forEach(item => { %>
-              <li><%= t(item) %></li>
-            <% }) %>
-          </ul>
-        </div>
-      </div>
-
-      <% if (slot.refs && slot.refs.length) { %>
-        <div class="historical-evidence">
-          <span class="muted mono" style="font-size:.75rem;">Evidencia historica:</span>
-          <% (slot.questionLinks || []).forEach(ref => { %>
-            <% if (ref.url) { %><a class="tag" href="<%= ref.url %>"><%= ref.label %> · ver enunciado e respostas</a><% } %>
-          <% }) %>
-        </div>
-      <% } %>
-
-      <div class="progress-mini"><span style="width:<%= slot.progress %>%"></span></div>
-      <form method="POST" action="/progresso" class="progress-form inline-progress">
-        <input type="hidden" name="discipline" value="<%= slot.discipline %>">
-        <input type="hidden" name="topic" value="<%= slot.topic %>">
-        <label class="progress-label">Progresso neste assunto: <strong><%= slot.progress %>%</strong></label>
-        <input type="range" name="progress" min="0" max="100" step="5" value="<%= slot.progress %>">
-        <input type="text" name="notes" value="<%= slot.progressNotes || '' %>" placeholder="nota rapida do que falta revisar">
-        <button class="btn secondary" type="submit">Salvar</button>
-      </form>
+      <div class="next-slot-head"><div><span class="tag mono">Q<%= String(slot.number).padStart(2, '0') %></span><span class="tag gold"><%= t(slot.discipline) %></span><span class="tag"><%= slot.confidence %></span></div><strong class="next-score"><%= slot.score %></strong></div>
+      <h3><%= t(slot.topic) %></h3><p class="muted" style="font-size:.86rem;"><%= t(slot.reason) %></p>
+      <div class="predicted-question"><span class="eyebrow" style="margin-bottom:2px;">Possível questão</span><strong><%= t(slot.likelyQuestion.charge) %></strong><p><%= t(slot.likelyQuestion.stem) %></p><p class="muted"><strong>Pegadinha provável:</strong> <%= t(slot.likelyQuestion.trap) %></p><p class="muted mono" style="font-size:.74rem;"><%= t(slot.likelyQuestion.evidence) %></p></div>
+      <div class="next-study"><div><span class="eyebrow" style="margin-bottom:2px;">Onde estudar</span><a href="<%= slot.sourceUrl %>" target="_blank" rel="noopener"><%= slot.directLesson ? 'Videoaula direta' : 'Busca focada' %>: <%= t(slot.source) %> - <%= t(slot.topic) %></a></div><div><span class="eyebrow" style="margin-bottom:2px;">Revisão objetiva</span><ul><% slot.checklist.forEach(item => { %><li><%= t(item) %></li><% }) %></ul></div></div>
+      <% if (slot.refs && slot.refs.length) { %><div class="historical-evidence"><span class="muted mono" style="font-size:.75rem;">Evidência histórica:</span><% (slot.questionLinks || []).forEach(ref => { %><% if (ref.url) { %><a class="tag" href="<%= ref.url %>"><%= ref.label %> · ver enunciado e respostas</a><% } %><% }) %></div><% } %>
+      <div class="progress-mini"><span style="width:<%= slot.progress %>%"></span></div><form method="POST" action="/progresso" class="progress-form inline-progress"><input type="hidden" name="discipline" value="<%= slot.discipline %>"><input type="hidden" name="topic" value="<%= slot.topic %>"><label class="progress-label">Progresso neste assunto: <strong><%= slot.progress %>%</strong></label><input type="range" name="progress" min="0" max="100" step="5" value="<%= slot.progress %>"><input type="text" name="notes" value="<%= slot.progressNotes || '' %>" placeholder="nota rápida do que falta revisar"><button class="btn secondary" type="submit">Salvar</button></form>
     </article>
   <% }) %>
 </div>
-
+<script>
+(async()=>{const box=document.getElementById('ai-prediction-preview');try{const r=await fetch('/api/previsao-ia?year=2027');const data=await r.json();if(!data.run||!data.items.length){box.innerHTML='<div class="empty">Nenhuma previsão IA calibrada ainda. <a href="/previsao-ia">Gerar agora</a>.</div>';return;}box.innerHTML=data.items.slice(0,6).map(x=>`<article class="card"><div><span class="tag gold">${x.discipline}</span><span class="tag">${x.topic}</span><span class="tag">${x.difficulty} · ${x.estimated_minutes} min</span></div><h3>${x.likely_charge}</h3><p>${x.possible_question||''}</p><p class="muted"><strong>Confiança calibrada:</strong> ${Math.round(x.confidence)}% · anos: ${(x.evidence_years||[]).join(', ')}</p></article>`).join('');}catch(e){box.innerHTML='<div class="empty">Não foi possível carregar a previsão calibrada.</div>';}})();
+</script>
 <%- include('partials/foot') %>
