@@ -2,7 +2,7 @@ const db = require('../db/db');
 
 const STANLEY_EMAIL = 'stanley.2010.lost@gmail.com';
 const ADMIN_EMAIL = 'admin@dossie-esfcex.local';
-const ADMIN_HASH = 'scrypt$de247295ef3f055685db7e4f8f7de466$429a9ab2626ff8bd4e992f19ba6187106ae9d717b2ea9165549ca02dd28dcaaeec9c566f8dd4f80a2e8e53e4ae5fa13126712dfd955f793a98e21363a5e76b62';
+const ADMIN_HASH = 'scrypt$11797825d27a1c0f091d2150cb24facb$00794c95d18c3280733c73d70767ab19632630c3c2cab4e362bf8f8871b80c38937f28b26147652ff53345e6e4e78b7e70e64d0d7d9d2f0b677b406f16ec0961';
 let readyPromise;
 
 async function bootstrap() {
