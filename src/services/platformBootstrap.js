@@ -14,7 +14,7 @@ async function bootstrap() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS city TEXT`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation TEXT`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`);
-    await client.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`);
 
     const stanley = (await client.query('SELECT id FROM users WHERE lower(email)=lower($1) LIMIT 1', [STANLEY_EMAIL])).rows[0];
     if (stanley) {
