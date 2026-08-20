@@ -18,6 +18,7 @@ env:
   NODE_VERSION: '22'
   VERCEL_ORG_ID: team_Gl5TWD0bTPFShM7ufLH5zdCs
   VERCEL_PROJECT_ID: prj_fDbbQ32JaAaiC5mEBvh2fB0nUS4i
+  VERCEL_SCOPE: stanley13
 
 jobs:
   ci:
@@ -85,20 +86,28 @@ jobs:
         if: steps.vercel-token.outputs.configured == 'true'
         run: npm install --global vercel@latest
 
+      - name: Vincular projeto Vercel explicitamente
+        if: steps.vercel-token.outputs.configured == 'true'
+        shell: bash
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          cat .vercel/project.json
+
       - name: Baixar configurações e variáveis de produção
         if: steps.vercel-token.outputs.configured == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: vercel pull --yes --environment=production --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
 
       - name: Build de produção no runner do GitHub
         if: steps.vercel-token.outputs.configured == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel build --prod --token="$VERCEL_TOKEN"
+        run: vercel build --prod --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
 
       - name: Deploy prebuilt em produção
         if: steps.vercel-token.outputs.configured == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        run: vercel deploy --prebuilt --prod --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
