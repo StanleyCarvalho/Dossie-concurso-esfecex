@@ -12,99 +12,18 @@ const uploadDir = process.env.VERCEL ? path.join('/tmp', 'editais') : path.join(
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } });
 
-async function listEditais(userId) {
-  return db.query(`SELECT e.*,COUNT(et.id)::int topics_count FROM editais e LEFT JOIN edital_topics et ON et.edital_id=e.id WHERE e.user_id=$1 GROUP BY e.id ORDER BY e.ano DESC,e.created_at DESC`, [userId]);
-}
+async function listEditais(userId){return db.query(`SELECT e.*,COUNT(et.id)::int topics_count FROM editais e LEFT JOIN edital_topics et ON et.edital_id=e.id WHERE e.user_id=$1 GROUP BY e.id ORDER BY e.ano DESC,e.created_at DESC`,[userId])}
+router.get('/editais',async(req,res)=>{const result=req.query.deleted==='1'?{success:true,message:'Edital excluído com sucesso.'}:null;res.render('editais',{editais:await listEditais(req.session.userId),result})});
+router.get('/editais/:id',async(req,res)=>{const edital=await db.one('SELECT * FROM editais WHERE id=$1 AND user_id=$2',[req.params.id,req.session.userId]);if(!edital)return res.status(404).render('error',{message:'Edital não encontrado.'});const topics=await db.query('SELECT * FROM edital_topics WHERE edital_id=$1 ORDER BY discipline,topic,subtopic',[edital.id]);const priorities=await getPriorityMatrix(req.session.userId,100);const priorityMap=new Map(priorities.map(p=>[`${canonicalDiscipline(p.discipline)}||${canonicalTopic(p.topic)}`,p]));res.render('edital_detail',{edital,topics:topics.map(t=>({...t,priority:priorityMap.get(`${canonicalDiscipline(t.discipline)}||${canonicalTopic(t.topic)}`)||null}))})});
+router.post('/editais',upload.single('editalPdf'),async(req,res)=>{try{if(!req.file)throw new Error('Selecione o PDF do edital.');const ano=Number(req.body.ano);if(!Number.isInteger(ano)||ano<2000||ano>2100)throw new Error('Informe um ano válido.');const raw=await extractTextFromPdf(req.file.path);const parsed=await parseEdital(raw,req.body);if(!Array.isArray(parsed.topics)||!parsed.topics.length)throw new Error('Nenhum conteúdo programático foi identificado no edital.');const edital=await db.one(`INSERT INTO editais(user_id,ano,banca,cargo,filename,raw_text) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,[req.session.userId,ano,req.body.banca||'VUNESP',req.body.cargo||'Informática',req.file.originalname,raw]);for(const t of parsed.topics){if(!t.discipline||!t.topic)continue;await db.query(`INSERT INTO edital_topics(edital_id,discipline,topic,subtopic,reference_text,weight) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[edital.id,t.discipline,t.topic,t.subtopic||'',t.reference_text||'',Number(t.weight)||1])}fs.unlinkSync(req.file.path);res.redirect(`/editais/${edital.id}`)}catch(error){if(req.file&&fs.existsSync(req.file.path))fs.unlinkSync(req.file.path);res.status(400).render('editais',{editais:await listEditais(req.session.userId),result:{error:error.message}})}});
+router.post('/editais/:id/delete',async(req,res)=>{const deleted=await db.one('DELETE FROM editais WHERE id=$1 AND user_id=$2 RETURNING id',[req.params.id,req.session.userId]);if(!deleted)return res.status(404).render('error',{message:'Edital não encontrado ou você não tem permissão para excluí-lo.'});res.redirect('/editais?deleted=1')});
+router.get('/recorrencias',async(req,res)=>res.render('recurrences',{recurrences:await getRecurrences(req.session.userId),repeated:await getRepeatedQuestions(req.session.userId)}));
+router.post('/recorrencias/recalcular',async(req,res)=>{await rebuildSimilarity(req.session.userId);res.redirect('/recorrencias')});
+router.get('/estudar-hoje',async(req,res)=>res.render('study_today',{priorities:await getPriorityMatrix(req.session.userId,20)}));
 
-router.get('/editais', async (req,res) => {
-  const result = req.query.deleted === '1' ? { success: true, message: 'Edital excluído com sucesso.' } : null;
-  res.render('editais', { editais: await listEditais(req.session.userId), result });
-});
-
-router.get('/editais/:id', async (req,res) => {
-  const edital = await db.one('SELECT * FROM editais WHERE id=$1 AND user_id=$2', [req.params.id, req.session.userId]);
-  if (!edital) return res.status(404).render('error', { message: 'Edital não encontrado.' });
-  const topics = await db.query('SELECT * FROM edital_topics WHERE edital_id=$1 ORDER BY discipline,topic,subtopic', [edital.id]);
-  const priorities = await getPriorityMatrix(req.session.userId, 100);
-  const priorityMap = new Map(priorities.map(p => [`${canonicalDiscipline(p.discipline)}||${canonicalTopic(p.topic)}`, p]));
-  const enriched = topics.map(t => ({ ...t, priority: priorityMap.get(`${canonicalDiscipline(t.discipline)}||${canonicalTopic(t.topic)}`) || null }));
-  res.render('edital_detail', { edital, topics: enriched });
-});
-
-router.post('/editais', upload.single('editalPdf'), async (req,res) => {
-  try {
-    if (!req.file) throw new Error('Selecione o PDF do edital.');
-    const ano = Number(req.body.ano);
-    if (!Number.isInteger(ano) || ano < 2000 || ano > 2100) throw new Error('Informe um ano válido.');
-    const raw = await extractTextFromPdf(req.file.path);
-    const parsed = await parseEdital(raw, req.body);
-    if (!Array.isArray(parsed.topics) || !parsed.topics.length) throw new Error('Nenhum conteúdo programático foi identificado no edital.');
-    const edital = await db.one(`INSERT INTO editais(user_id,ano,banca,cargo,filename,raw_text) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, [req.session.userId, ano, req.body.banca || 'VUNESP', req.body.cargo || 'Informática', req.file.originalname, raw]);
-    for (const t of parsed.topics) {
-      if (!t.discipline || !t.topic) continue;
-      await db.query(`INSERT INTO edital_topics(edital_id,discipline,topic,subtopic,reference_text,weight) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`, [edital.id, t.discipline, t.topic, t.subtopic || '', t.reference_text || '', Number(t.weight) || 1]);
-    }
-    fs.unlinkSync(req.file.path);
-    res.redirect(`/editais/${edital.id}`);
-  } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(400).render('editais', { editais: await listEditais(req.session.userId), result: { error: error.message } });
-  }
-});
-
-router.post('/editais/:id/delete', async (req,res) => {
-  const deleted = await db.one('DELETE FROM editais WHERE id=$1 AND user_id=$2 RETURNING id', [req.params.id, req.session.userId]);
-  if (!deleted) return res.status(404).render('error', { message: 'Edital não encontrado ou você não tem permissão para excluí-lo.' });
-  res.redirect('/editais?deleted=1');
-});
-
-router.get('/recorrencias', async (req,res) => {
-  res.render('recurrences', { recurrences: await getRecurrences(req.session.userId), repeated: await getRepeatedQuestions(req.session.userId) });
-});
-router.post('/recorrencias/recalcular', async (req,res) => { await rebuildSimilarity(req.session.userId); res.redirect('/recorrencias'); });
-router.get('/estudar-hoje', async (req,res) => { res.render('study_today', { priorities: await getPriorityMatrix(req.session.userId, 20) }); });
-
-async function findTrainingQuestions({ userId, discipline, topic, limit = 20 }) {
-  const rows = await db.query(`SELECT q.*,e.ano FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE (q.source='ai_practice' AND q.user_id=$1) OR (q.source<>'ai_practice' AND e.user_id=$1) ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END,e.ano DESC NULLS LAST,q.id DESC LIMIT 600`, [userId]);
-  const targetDiscipline = canonicalDiscipline(discipline);
-  const targetTopic = canonicalTopic(topic);
-  return rows.filter(q => canonicalDiscipline(q.discipline) === targetDiscipline && canonicalTopic(q.topic) === targetTopic).slice(0, limit);
-}
-
-router.get('/treino', async (req,res) => {
-  const discipline = String(req.query.discipline || '').trim();
-  const topic = String(req.query.topic || '').trim();
-  const questions = discipline && topic ? await findTrainingQuestions({ userId: req.session.userId, discipline, topic }) : [];
-  res.render('training', { discipline, topic, questions });
-});
-
-router.post('/treino/gerar', async (req,res) => {
-  const discipline = String(req.body.discipline || '').trim();
-  const topic = String(req.body.topic || '').trim();
-  if (!discipline || !topic) throw new Error('Disciplina e assunto são obrigatórios.');
-  const examples = (await findTrainingQuestions({ userId: req.session.userId, discipline, topic, limit: 8 })).filter(q => q.source !== 'ai_practice');
-  const generated = await generatePracticeQuestions({ discipline, topic, count: 5, examples });
-  for (const q of generated) await db.query(`INSERT INTO questions(discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation,source,user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ai_practice',$11)`, [canonicalDiscipline(discipline), canonicalTopic(topic), q.statement, q.alt_a, q.alt_b, q.alt_c, q.alt_d, q.alt_e || null, q.correct_letter, q.explanation || null, req.session.userId]);
-  res.redirect(`/treino?discipline=${encodeURIComponent(canonicalDiscipline(discipline))}&topic=${encodeURIComponent(canonicalTopic(topic))}`);
-});
-
-router.post('/treino/:id/responder', async (req,res) => {
-  const questionId = Number(req.params.id);
-  const letter = String(req.body.letter || '').toUpperCase();
-  if (!/^[A-E]$/.test(letter)) return res.status(400).json({ ok: false, error: 'Alternativa inválida.' });
-  const question = await db.one(`SELECT q.*,e.user_id exam_user_id FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE q.id=$1 AND ((q.source='ai_practice' AND q.user_id=$2) OR (q.source<>'ai_practice' AND e.user_id=$2))`, [questionId, req.session.userId]);
-  if (!question) return res.status(404).json({ ok: false, error: 'Questão não encontrada.' });
-  const result = await recordAttempt({ userId: req.session.userId, questionId, letter, source: 'fixacao' });
-  let explanation = String(question.explanation || '').trim();
-  let explanationSource = explanation ? 'salva' : 'ia';
-  try { if (!result.correct || !explanation) explanation = await explainQuestion(question, letter); }
-  catch (error) { console.error('Falha ao gerar explicação da questão', questionId, error?.message || error); if (!explanation) explanation = `O gabarito cadastrado é ${result.correctLetter}. Revise o conceito central de ${question.topic || question.discipline || 'esta questão'} e compare cada alternativa com o que o enunciado exige.`; explanationSource = 'fallback'; }
-  res.json({ ok:true,...result,chosenLetter:letter,explanation,explanationSource,topic:question.topic,discipline:question.discipline });
-});
-
-router.get('/caderno-erros', async (req,res) => {
-  const errors = await db.query(`SELECT qa.*,q.statement,q.discipline,q.topic,q.correct_letter,e.ano FROM question_attempts qa JOIN questions q ON q.id=qa.question_id LEFT JOIN exams e ON e.id=q.exam_id WHERE qa.user_id=$1 AND qa.correct=false ORDER BY qa.answered_at DESC LIMIT 200`, [req.session.userId]);
-  res.render('error_notebook', { errors });
-});
-
-module.exports = router;
+async function findTrainingQuestions({userId,discipline,topic,limit=20}){const rows=await db.query(`SELECT q.*,e.ano FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE (q.source='ai_practice' AND q.user_id=$1) OR (q.source<>'ai_practice' AND e.user_id=$1) ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END,e.ano DESC NULLS LAST,q.id DESC LIMIT 600`,[userId]);const targetDiscipline=canonicalDiscipline(discipline),targetTopic=canonicalTopic(topic);return rows.filter(q=>canonicalDiscipline(q.discipline)===targetDiscipline&&canonicalTopic(q.topic)===targetTopic).slice(0,limit)}
+router.get('/treino',async(req,res)=>{const discipline=String(req.query.discipline||'').trim(),topic=String(req.query.topic||'').trim();const questions=discipline&&topic?await findTrainingQuestions({userId:req.session.userId,discipline,topic}):[];res.render('training',{discipline,topic,questions})});
+router.post('/treino/gerar',async(req,res)=>{const discipline=String(req.body.discipline||'').trim(),topic=String(req.body.topic||'').trim();if(!discipline||!topic)throw new Error('Disciplina e assunto são obrigatórios.');const examples=(await findTrainingQuestions({userId:req.session.userId,discipline,topic,limit:8})).filter(q=>q.source!=='ai_practice');const generated=await generatePracticeQuestions({discipline,topic,count:5,examples});for(const q of generated)await db.query(`INSERT INTO questions(discipline,topic,context_title,context_text,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation,source,user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ai_practice',$13)`,[canonicalDiscipline(discipline),canonicalTopic(topic),q.context_title||null,q.context_text||null,q.statement,q.alt_a,q.alt_b,q.alt_c,q.alt_d,q.alt_e||null,q.correct_letter,q.explanation||null,req.session.userId]);res.redirect(`/treino?discipline=${encodeURIComponent(canonicalDiscipline(discipline))}&topic=${encodeURIComponent(canonicalTopic(topic))}`)});
+router.post('/treino/:id/responder',async(req,res)=>{const questionId=Number(req.params.id),letter=String(req.body.letter||'').toUpperCase();if(!/^[A-E]$/.test(letter))return res.status(400).json({ok:false,error:'Alternativa inválida.'});const question=await db.one(`SELECT q.*,e.user_id exam_user_id FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE q.id=$1 AND ((q.source='ai_practice' AND q.user_id=$2) OR (q.source<>'ai_practice' AND e.user_id=$2))`,[questionId,req.session.userId]);if(!question)return res.status(404).json({ok:false,error:'Questão não encontrada.'});const result=await recordAttempt({userId:req.session.userId,questionId,letter,source:'fixacao'});let explanation=String(question.explanation||'').trim(),explanationSource=explanation?'salva':'ia';try{if(!result.correct||!explanation)explanation=await explainQuestion(question,letter)}catch(error){console.error('Falha ao gerar explicação da questão',questionId,error?.message||error);if(!explanation)explanation=`O gabarito cadastrado é ${result.correctLetter}. Revise o conceito central de ${question.topic||question.discipline||'esta questão'} e compare cada alternativa com o que o enunciado exige.`;explanationSource='fallback'}res.json({ok:true,...result,chosenLetter:letter,explanation,explanationSource,topic:question.topic,discipline:question.discipline})});
+router.get('/caderno-erros',async(req,res)=>{const errors=await db.query(`SELECT qa.*,q.statement,q.discipline,q.topic,q.correct_letter,e.ano FROM question_attempts qa JOIN questions q ON q.id=qa.question_id LEFT JOIN exams e ON e.id=q.exam_id WHERE qa.user_id=$1 AND qa.correct=false ORDER BY qa.answered_at DESC LIMIT 200`,[req.session.userId]);res.render('error_notebook',{errors})});
+module.exports=router;

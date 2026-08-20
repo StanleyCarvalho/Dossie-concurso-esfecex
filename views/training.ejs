@@ -2,7 +2,7 @@
 <div class="page-header">
   <span class="eyebrow">Fixação ativa</span>
   <h1>Treino por assunto</h1>
-  <p class="muted">Resolva questões reais do mesmo assunto; após cada resposta, veja o gabarito e a explicação do porquê da alternativa correta.</p>
+  <p class="muted">Resolva a questão com todo o contexto da prova: texto-base, enunciado, alternativas e explicação após a resposta.</p>
 </div>
 
 <section class="card">
@@ -26,9 +26,22 @@
 
   <% if(!questions.length){ %><p class="muted">Não há questão real classificada exatamente neste assunto. Você pode gerar treino inédito.</p><% } %>
 
-  <% questions.forEach((q,index)=>{ %>
+  <% questions.forEach((q,index)=>{ const needsContext=/\b(texto|trecho|fragmento|charge|tirinha|considerando|de acordo)\b/i.test(String(q.statement||'')); %>
   <article class="question-card training-question" data-question="<%= q.id %>">
     <div class="meta"><strong>Questão <%= index+1 %></strong><span><%= q.ano ? 'Prova '+q.ano : 'Treino IA' %></span></div>
+
+    <% if(q.context_text){ %>
+      <section class="question-context">
+        <div class="question-context-head"><span class="eyebrow">Texto-base da questão</span><strong><%= q.context_title || 'Leia o texto para responder' %></strong></div>
+        <div class="question-context-body"><%= q.context_text %></div>
+      </section>
+    <% } else if(needsContext && q.ano){ %>
+      <div class="notice warning context-missing">
+        <strong>Texto-base não preservado nesta importação antiga.</strong>
+        <span>Esta questão depende de um texto/trecho anterior. Para manter fidelidade à prova, o sistema não irá inventar esse conteúdo. Reimporte a prova de <%= q.ano %> para recuperar e associar o texto-base automaticamente.</span>
+      </div>
+    <% } %>
+
     <p class="question-statement"><%= q.statement %></p>
 
     <div class="alternatives-list">
@@ -47,10 +60,7 @@
 
     <div class="answer-result" aria-live="polite"></div>
     <div class="answer-explanation" hidden>
-      <div class="explanation-header">
-        <span class="explanation-icon">💡</span>
-        <div><span class="eyebrow">Explicação</span><strong>Entenda esta questão</strong></div>
-      </div>
+      <div class="explanation-header"><span class="explanation-icon">💡</span><div><span class="eyebrow">Explicação</span><strong>Entenda esta questão</strong></div></div>
       <div class="explanation-text"></div>
       <div class="explanation-footer">
         <a class="btn secondary" href="/treino?discipline=<%= encodeURIComponent(q.discipline || discipline) %>&topic=<%= encodeURIComponent(q.topic || topic) %>">Treinar mais deste assunto</a>
@@ -64,56 +74,10 @@
 
 <script>
 async function answerQuestion(id, btn) {
-  const card = btn.closest('[data-question]');
-  const picked = card.querySelector('input[type=radio]:checked');
-  const resultEl = card.querySelector('.answer-result');
-  const explanationEl = card.querySelector('.answer-explanation');
-  const explanationText = card.querySelector('.explanation-text');
-  const loading = card.querySelector('.answer-loading');
-
-  if (!picked) {
-    resultEl.textContent = 'Selecione uma alternativa antes de responder.';
-    resultEl.className = 'answer-result warning';
-    return;
-  }
-
-  btn.disabled = true;
-  loading.hidden = false;
-  resultEl.textContent = '';
-  explanationEl.hidden = true;
-
-  try {
-    const response = await fetch('/treino/' + id + '/responder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ letter: picked.value })
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível corrigir a questão.');
-
-    card.querySelectorAll('.alternative').forEach(label => {
-      const input = label.querySelector('input');
-      input.disabled = true;
-      label.classList.remove('selected-answer', 'correct-answer', 'wrong-answer');
-      if (label.dataset.letter === data.correctLetter) label.classList.add('correct-answer');
-      if (label.dataset.letter === data.chosenLetter) label.classList.add(data.correct ? 'selected-answer' : 'wrong-answer');
-    });
-
-    resultEl.className = 'answer-result ' + (data.correct ? 'success' : 'error');
-    resultEl.textContent = data.correct
-      ? '✅ Correto! Você marcou ' + data.chosenLetter + ', que é o gabarito.'
-      : '❌ Incorreto. Você marcou ' + data.chosenLetter + '. O gabarito correto é ' + data.correctLetter + '.';
-
-    explanationText.textContent = data.explanation || 'Explicação indisponível no momento.';
-    explanationEl.hidden = false;
-    explanationEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  } catch (error) {
-    btn.disabled = false;
-    resultEl.className = 'answer-result error';
-    resultEl.textContent = error.message || 'Erro ao corrigir a questão.';
-  } finally {
-    loading.hidden = true;
-  }
+  const card=btn.closest('[data-question]'),picked=card.querySelector('input[type=radio]:checked'),resultEl=card.querySelector('.answer-result'),explanationEl=card.querySelector('.answer-explanation'),explanationText=card.querySelector('.explanation-text'),loading=card.querySelector('.answer-loading');
+  if(!picked){resultEl.textContent='Selecione uma alternativa antes de responder.';resultEl.className='answer-result warning';return;}
+  btn.disabled=true;loading.hidden=false;resultEl.textContent='';explanationEl.hidden=true;
+  try{const response=await fetch('/treino/'+id+'/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({letter:picked.value})});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Não foi possível corrigir a questão.');card.querySelectorAll('.alternative').forEach(label=>{const input=label.querySelector('input');input.disabled=true;label.classList.remove('selected-answer','correct-answer','wrong-answer');if(label.dataset.letter===data.correctLetter)label.classList.add('correct-answer');if(label.dataset.letter===data.chosenLetter)label.classList.add(data.correct?'selected-answer':'wrong-answer')});resultEl.className='answer-result '+(data.correct?'success':'error');resultEl.textContent=data.correct?'✅ Correto! Você marcou '+data.chosenLetter+', que é o gabarito.':'❌ Incorreto. Você marcou '+data.chosenLetter+'. O gabarito correto é '+data.correctLetter+'.';explanationText.textContent=data.explanation||'Explicação indisponível no momento.';explanationEl.hidden=false;explanationEl.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(error){btn.disabled=false;resultEl.className='answer-result error';resultEl.textContent=error.message||'Erro ao corrigir a questão.'}finally{loading.hidden=true}
 }
 </script>
 <%- include('partials/foot') %>
