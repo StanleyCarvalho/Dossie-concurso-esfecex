@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/professional.css">
 </head>
 <body>
 <div class="mobile-topbar">
@@ -28,14 +29,12 @@
       <a href="/proxima-prova" class="<%= active === 'proxima' ? 'active' : '' %>"><span class="num">02</span>Possível próxima prova</a>
       <a href="/previsao-ia" class="<%= active === 'previsao' ? 'active' : '' %>"><span class="num">03</span>Previsão IA calibrada</a>
       <a href="/analise" class="<%= active === 'analise' ? 'active' : '' %>"><span class="num">04</span>Análise de padrões</a>
-
       <span class="nav-section">Plano e execução</span>
       <a href="/plano-estudos" class="<%= active === 'plano' ? 'active' : '' %>"><span class="num">05</span>Plano diário e semanal</a>
       <a href="/estudar-hoje" class="<%= active === 'hoje' ? 'active' : '' %>"><span class="num">06</span>O que estudar hoje</a>
       <a href="/treino" class="<%= active === 'treino' ? 'active' : '' %>"><span class="num">07</span>Treino por assunto</a>
       <a href="/caderno-erros" class="<%= active === 'erros' ? 'active' : '' %>"><span class="num">08</span>Caderno de erros</a>
       <a href="/simulados" class="<%= active === 'simulados' ? 'active' : '' %>"><span class="num">09</span>Simulados</a>
-
       <span class="nav-section">Banco e evidências</span>
       <a href="/editais" class="<%= active === 'editais' ? 'active' : '' %>"><span class="num">10</span>Editais</a>
       <a href="/questoes-repetidas" class="<%= active === 'repetidas' ? 'active' : '' %>"><span class="num">11</span>Repetidas por assunto</a>
@@ -44,9 +43,7 @@
       <a href="/questoes" class="<%= active === 'questoes' ? 'active' : '' %>"><span class="num">14</span>Banco de questões</a>
       <a href="/import" class="<%= active === 'import' ? 'active' : '' %>"><span class="num">15</span>Importar provas</a>
     </nav>
-    <% if (user) { %>
-      <div class="user-box"><strong><%= user.name || user.email %></strong><span><%= user.email %></span><form method="POST" action="/logout"><button class="btn secondary" type="submit">Sair</button></form></div>
-    <% } %>
+    <% if (user) { %><div class="user-box"><strong><%= user.name || user.email %></strong><span><%= user.email %></span><form method="POST" action="/logout"><button class="btn secondary" type="submit">Sair</button></form></div><% } %>
     <div class="stamp">BANCA: VUNESP<br>CARGO: INFORMÁTICA</div>
   </aside>
   <main class="main">
