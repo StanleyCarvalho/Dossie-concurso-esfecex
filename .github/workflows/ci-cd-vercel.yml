@@ -3,6 +3,7 @@ name: CI/CD Vercel
 on:
   pull_request:
     branches: [master]
+    types: [opened, synchronize, reopened, closed]
   push:
     branches: [master]
   workflow_dispatch:
@@ -29,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && 'master' || github.ref }}
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
@@ -51,14 +54,19 @@ jobs:
   deploy:
     name: Build no GitHub e deploy prebuilt
     needs: ci
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
 
     steps:
-      - name: Checkout
+      - name: Checkout da master publicada
         uses: actions/checkout@v4
+        with:
+          ref: master
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
