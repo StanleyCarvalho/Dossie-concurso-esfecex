@@ -6,6 +6,7 @@
   <title><%= mode === 'register' ? 'Solicitar acesso' : 'Login' %> - ESFCEx Informática</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/professional.css">
+  <link rel="stylesheet" href="/admin.css">
 </head>
 <body>
   <main class="auth-page">
@@ -13,19 +14,14 @@
       <div class="auth-brand"><span class="brand-mark">EP</span><div><span class="eyebrow">Dossiê de preparação</span><strong>ESFCEx · Informática</strong></div></div>
       <h1><%= mode === 'register' ? 'Solicitar acesso à plataforma' : 'Entrar na plataforma' %></h1>
       <p class="muted"><%= mode === 'register' ? 'Crie seu cadastro. O acesso será liberado somente após aprovação do administrador e ficará válido pelo período definido por ele.' : 'Entre para acessar seu acervo pessoal de provas, editais, planejamento, treinos e evolução.' %></p>
-
       <% if (success) { %><div class="notice success" style="margin-bottom:14px"><%= success %></div><% } %>
       <% if (error) { %><div class="notice auth-error" style="margin-bottom:14px"><%= error %></div><% } %>
-
       <form method="POST" action="<%= mode === 'register' ? '/cadastro' : '/login' %>" class="auth-form">
-        <% if (mode === 'register') { %>
-          <label>Nome completo<input type="text" name="name" autocomplete="name" required placeholder="Seu nome completo"></label>
-        <% } %>
+        <% if (mode === 'register') { %><label>Nome completo<input type="text" name="name" autocomplete="name" required placeholder="Seu nome completo"></label><% } %>
         <label>E-mail<input type="email" name="email" autocomplete="email" required placeholder="voce@email.com"></label>
         <label>Senha<input type="password" name="password" autocomplete="<%= mode === 'register' ? 'new-password' : 'current-password' %>" required minlength="<%= mode === 'register' ? 8 : 1 %>" placeholder="<%= mode === 'register' ? 'Mínimo de 8 caracteres' : 'Sua senha' %>"></label>
         <button class="btn" type="submit"><%= mode === 'register' ? 'Enviar solicitação de acesso' : 'Entrar' %></button>
       </form>
-
       <% if (mode === 'register') { %><div class="approval-info"><strong>Como funciona</strong><span>1. Você solicita o cadastro.</span><span>2. O administrador analisa e define a data final de acesso.</span><span>3. Após aprovação, sua conta inicia vazia para você importar suas próprias provas e edital.</span></div><p class="muted" style="margin-top:16px;">Já tem conta? <a href="/login">Entrar</a></p><% } else { %><p class="muted" style="margin-top:16px;">Ainda não tem conta? <a href="/cadastro">Solicitar acesso</a></p><% } %>
     </section>
   </main>
