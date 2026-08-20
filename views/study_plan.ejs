@@ -1,131 +1,133 @@
 <%- include('partials/head') %>
 
-<div class="page-header">
-  <span class="eyebrow">Roteiro priorizado</span>
-  <h1>Plano de estudos</h1>
-  <p class="muted">Priorizacao por incidencia historica, recorrencia recente e desempenho em simulados.</p>
+<div class="page-header page-header--split">
+  <div>
+    <span class="eyebrow">Execução diária + cobertura semanal</span>
+    <h1>Plano de estudos</h1>
+    <p class="muted">Prioriza o que mais cai sem abandonar nenhum tópico do edital. Cada ciclo combina teoria, questões, correção de erros e revisão.</p>
+  </div>
+  <form method="POST" action="/plano-estudos/gerar">
+    <button class="btn" type="submit">Recalcular plano completo</button>
+  </form>
 </div>
 
-<% if (querySaved === 'plan') { %><div class="card" style="border-color:var(--ok); margin-bottom:18px;">✅ Plano gerado e salvo na sua conta.</div><% } %>
-<% if (querySaved === 'agenda') { %><div class="card" style="border-color:var(--ok); margin-bottom:18px;">✅ Dias e carga horária salvos na sua conta.</div><% } %>
+<% if (querySaved === 'plan') { %><div class="notice success">Plano recalculado e salvo com as prioridades atuais.</div><% } %>
+<% if (querySaved === 'agenda') { %><div class="notice success">Disponibilidade semanal atualizada.</div><% } %>
 
-<form method="POST" action="/plano-estudos/gerar" style="margin-bottom:24px;">
-  <button class="btn" type="submit">Gerar e salvar plano com IA</button>
-  <span class="muted" style="font-size:.8rem; margin-left:10px;">Usa provas importadas, relatório salvo, simulados e seu progresso.</span>
-</form>
+<div class="kpi-grid">
+  <article class="card stat"><div class="value"><%= weeklySchedule.editalCoverage %>%</div><div class="label">Cobertura do edital</div><div class="progress-mini"><span style="width:<%= weeklySchedule.editalCoverage %>%"></span></div></article>
+  <article class="card stat"><div class="value"><%= weeklySchedule.editalDone %>/<%= weeklySchedule.totalEdital %></div><div class="label">Tópicos concluídos</div><p class="muted small">Base: <%= edital ? `Edital ${edital.ano}` : 'nenhum edital importado' %></p></article>
+  <article class="card stat"><div class="value"><%= Math.round(weeklySchedule.totalWeeklyMinutes / 60 * 10) / 10 %>h</div><div class="label">Carga semanal</div><p class="muted small"><%= selectedDays.length %> dia(s) de estudo</p></article>
+  <article class="card stat"><div class="value"><%= weeklySchedule.weeksToCover || 0 %></div><div class="label">Semanas estimadas</div><p class="muted small">Para passar pelos tópicos ainda pendentes</p></article>
+</div>
 
-<div class="card planner-card" style="margin-bottom:18px;">
+<section class="card planner-card section-gap">
   <div class="planner-head">
     <div>
-      <h3>Agenda semanal cirúrgica</h3>
-      <p class="muted" style="font-size:.86rem;">Escolha seus dias e horas. O sistema distribui o tempo pelos assuntos com maior chance de cobrança no ano seguinte, usando a matriz e seu progresso.</p>
+      <span class="eyebrow">Configuração</span>
+      <h2>Minha semana de estudo</h2>
+      <p class="muted">Defina os dias e a carga. O cronograma distribui primeiro os tópicos obrigatórios do edital com maior incidência e depois cobre os demais.</p>
     </div>
     <div class="planner-total mono"><%= Math.round(weeklySchedule.totalWeeklyMinutes / 60 * 10) / 10 %>h/semana</div>
   </div>
-
   <form method="POST" action="/plano-estudos/agenda/salvar" class="availability-form">
     <div class="day-picker">
       <% Object.entries(dayLabels).forEach(([key, label]) => { %>
-        <label class="day-chip">
-          <input type="checkbox" name="days" value="<%= key %>" <%= selectedDays.includes(key) ? 'checked' : '' %>>
-          <span><%= label.slice(0, 3) %></span>
-        </label>
+        <label class="day-chip"><input type="checkbox" name="days" value="<%= key %>" <%= selectedDays.includes(key) ? 'checked' : '' %>><span><%= label.slice(0, 3) %></span></label>
       <% }) %>
     </div>
-    <label class="hours-field">Horas por dia
-      <input type="number" name="hoursPerDay" min="0.5" max="12" step="0.5" value="<%= hoursPerDay %>">
-    </label>
-    <button class="btn" type="submit">Salvar agenda</button>
+    <label class="hours-field">Horas por dia<input type="number" name="hoursPerDay" min="0.5" max="12" step="0.5" value="<%= hoursPerDay %>"></label>
+    <button class="btn" type="submit">Atualizar agenda</button>
   </form>
+</section>
 
-  <% if (weeklySchedule.blocks.length === 0) { %>
-    <div class="empty" style="margin-top:14px;">Escolha pelo menos um dia para montar sua agenda.</div>
+<section class="section-gap">
+  <div class="section-title-row">
+    <div><span class="eyebrow">Execução imediata</span><h2>Estudo de hoje</h2></div>
+    <span class="tag gold"><%= todayBlocks.reduce((sum,b)=>sum+b.minutes,0) %> min planejados</span>
+  </div>
+  <% if (!todayBlocks.length) { %>
+    <div class="empty">Hoje não há bloco planejado. Ajuste seus dias acima ou use a agenda semanal para adiantar o próximo tópico.</div>
+  <% } else { %>
+    <div class="today-grid">
+      <% todayBlocks.forEach((block, idx) => { %>
+        <article class="card today-card">
+          <div class="card-headline"><span class="step-number"><%= idx + 1 %></span><div><span class="tag <%= block.editalRequired ? 'gold' : '' %>"><%= block.editalRequired ? 'EDITAL' : 'HISTÓRICO' %></span><h3><%= t(block.discipline) %></h3></div><strong class="mono"><%= block.minutes %> min</strong></div>
+          <h4><%= t(block.topic) %></h4>
+          <ul class="task-list"><% block.tasks.forEach(task => { %><li><%= t(task) %></li><% }) %></ul>
+          <div class="card-actions"><a class="btn secondary" href="/treino?discipline=<%= encodeURIComponent(block.discipline) %>&topic=<%= encodeURIComponent(block.topic) %>">Resolver questões</a><% if (block.sourceUrl) { %><a href="<%= block.sourceUrl %>" <%= block.sourceUrl.startsWith('http') ? 'target="_blank" rel="noopener"' : '' %>>Material de estudo</a><% } %></div>
+        </article>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<section class="section-gap">
+  <div class="section-title-row">
+    <div><span class="eyebrow">Visão operacional</span><h2>Agenda da semana</h2></div>
+    <span class="muted small"><%= weeklySchedule.scheduledTopics || 0 %> tópico(s) nesta semana · <%= weeklySchedule.pendingTopics || 0 %> pendente(s)</span>
+  </div>
+  <% if (!weeklySchedule.blocks.length) { %>
+    <div class="empty">Selecione pelo menos um dia de estudo para montar sua semana.</div>
   <% } else { %>
     <div class="schedule-grid">
-      <% weeklySchedule.studyDays.forEach(day => { %>
+      <% weeklySchedule.studyDays.forEach(day => { const dayBlocks = weeklySchedule.blocks.filter(block => block.day === day); %>
         <section class="schedule-day">
-          <h4><%= dayLabels[day] %></h4>
-          <% weeklySchedule.blocks.filter(block => block.day === day).forEach(block => { %>
-            <div class="schedule-block">
-              <div class="schedule-time mono"><%= block.minutes %> min</div>
+          <div class="schedule-day-head"><h3><%= dayLabels[day] %></h3><span class="mono"><%= dayBlocks.reduce((sum,b)=>sum+b.minutes,0) %> min</span></div>
+          <% dayBlocks.forEach(block => { %>
+            <article class="schedule-block">
+              <div class="schedule-time mono"><%= block.minutes %>m</div>
               <div>
-                <span class="tag gold"><%= t(block.discipline) %></span>
-                <strong><%= t(block.topic) %></strong>
-                <a href="<%= block.sourceUrl %>" target="_blank" rel="noopener">videoaula/material foco</a>
-                <ul>
-                  <% block.tasks.forEach(task => { %><li><%= t(task) %></li><% }) %>
-                </ul>
+                <div class="tags-line"><span class="tag <%= block.editalRequired ? 'gold' : '' %>"><%= block.editalRequired ? 'EDITAL' : 'HIST.' %></span><span class="tag"><%= block.confidence %></span></div>
+                <strong><%= t(block.discipline) %></strong>
+                <span class="topic-line"><%= t(block.topic) %></span>
+                <div class="progress-mini"><span style="width:<%= block.progress %>%"></span></div>
+                <a href="/treino?discipline=<%= encodeURIComponent(block.discipline) %>&topic=<%= encodeURIComponent(block.topic) %>">Treinar assunto →</a>
               </div>
-            </div>
+            </article>
           <% }) %>
         </section>
       <% }) %>
     </div>
   <% } %>
-</div>
+</section>
 
-<div class="card" style="margin-bottom:18px;">
-  <h3>Roteiro objetivo por incidencia</h3>
-  <p class="muted" style="font-size:.82rem;">Use esta lista como trilha principal: ela vem diretamente das provas importadas e dos dados historicos.</p>
-  <table>
-    <thead>
-      <tr><th>Ordem</th><th>Disciplina / assunto</th><th>Onde estudar</th><th>Como revisar</th></tr>
-    </thead>
-    <tbody>
-      <% studyTargets.forEach((target, idx) => { %>
-        <tr>
-          <td class="mono"><%= idx + 1 %></td>
-          <td>
-            <span class="tag gold"><%= t(target.discipline) %></span>
-            <span class="tag"><%= target.confidence %></span>
-            <strong style="display:block; margin-top:5px;"><%= t(target.topic) %></strong>
-            <span class="muted mono" style="font-size:.72rem;">prioridade <%= target.score %> - anos: <%= target.years.join(', ') || 'sem ano' %></span>
-          </td>
-          <td>
-            <a href="<%= target.sourceUrl %>" target="_blank" rel="noopener"><%= t(target.source) %></a>
-            <div class="muted" style="font-size:.82rem;">Foque em: <%= target.focus.map(item => t(item)).join('; ') %></div>
-          </td>
-          <td class="muted" style="font-size:.82rem; min-width:220px;">
-            <% if (target.questionLinks.length) { %>
-              <% target.questionLinks.forEach(ref => { %>
-                <% if (ref.url) { %><a class="tag" href="<%= ref.url %>"><%= ref.label %></a><% } %>
-              <% }) %><br>
-            <% } %>
-            <a href="/questoes?discipline=<%= encodeURIComponent(target.discipline) %>">questoes reais da disciplina</a>
-            <form method="POST" action="/progresso" class="progress-form">
-              <input type="hidden" name="discipline" value="<%= target.discipline %>">
-              <input type="hidden" name="topic" value="<%= target.topic %>">
-              <label class="progress-label">Progresso: <strong><%= target.progress %>%</strong></label>
-              <input type="range" name="progress" min="0" max="100" step="5" value="<%= target.progress %>">
-              <input type="text" name="notes" value="<%= target.progressNotes || '' %>" placeholder="observacao pessoal">
-              <button class="btn secondary" type="submit">Salvar</button>
-            </form>
-          </td>
-        </tr>
+<section class="card section-gap">
+  <div class="section-title-row">
+    <div><span class="eyebrow">Checklist do edital</span><h2>Cobertura completa</h2></div>
+    <% if (edital) { %><a href="/editais/<%= edital.id %>">Abrir edital analisado →</a><% } %>
+  </div>
+  <% if (!edital) { %>
+    <div class="empty">Importe o edital mais recente para o sistema garantir cobertura de 100% do conteúdo programático.</div>
+  <% } else { %>
+    <div class="coverage-list">
+      <% weeklySchedule.queue.filter(item => item.editalRequired).forEach(item => { %>
+        <article class="coverage-row">
+          <div class="coverage-main"><span class="status-dot <%= Number(item.progress||0) >= 100 ? 'done' : Number(item.progress||0) > 0 ? 'doing' : '' %>"></span><div><strong><%= t(item.discipline) %></strong><span><%= t(item.topic) %></span></div></div>
+          <div class="coverage-priority"><span class="tag"><%= item.sourceType === 'edital+historico' ? 'EDITAL + RECORRÊNCIA' : 'EDITAL' %></span><span class="mono"><%= Math.round(item.priority || item.score || 0) %></span></div>
+          <form method="POST" action="/progresso" class="coverage-progress">
+            <input type="hidden" name="discipline" value="<%= item.discipline %>"><input type="hidden" name="topic" value="<%= item.topic %>">
+            <input aria-label="Progresso em <%= item.topic %>" type="range" name="progress" min="0" max="100" step="5" value="<%= item.progress || 0 %>"><strong class="mono"><%= item.progress || 0 %>%</strong><button class="btn secondary" type="submit">Salvar</button>
+          </form>
+        </article>
       <% }) %>
-    </tbody>
-  </table>
-</div>
-
-<% if (items.length === 0) { %>
-  <div class="empty">Nenhum plano com IA gerado ainda. Clique no botao acima se quiser notas explicativas por assunto.</div>
-<% } else { %>
-  <h3 style="margin:20px 0 12px;">Notas de estudo geradas por IA</h3>
-  <p class="muted mono" style="font-size:.75rem;">Plano salvo em <%= new Date(items[0].generated_at).toLocaleString('pt-BR') %></p>
-  <% items.forEach(it => { %>
-    <div class="card" style="margin-bottom:12px;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-        <div>
-          <span class="tag gold"><%= it.discipline %></span>
-          <span class="tag"><%= it.status %></span>
-          <h3 style="margin-top:8px;"><%= it.topic %></h3>
-        </div>
-        <div class="mono" style="color:var(--gold); font-size:1.3rem;"><%= Math.round(it.priority_score) %></div>
-      </div>
-      <p class="muted" style="font-size:.85rem;"><strong>Por que:</strong> <%= it.rationale %></p>
-      <p style="font-size:.88rem;"><%= it.study_notes %></p>
     </div>
-  <% }) %>
-<% } %>
+  <% } %>
+</section>
+
+<section class="section-gap">
+  <div class="section-title-row"><div><span class="eyebrow">Prioridade inteligente</span><h2>Assuntos que merecem mais tempo</h2></div></div>
+  <div class="priority-grid">
+    <% studyTargets.slice(0, 12).forEach((target, idx) => { %>
+      <article class="card priority-card">
+        <div class="priority-top"><span class="step-number"><%= idx + 1 %></span><strong class="score-pill"><%= target.score %></strong></div>
+        <span class="tag gold"><%= t(target.discipline) %></span><h3><%= t(target.topic) %></h3>
+        <p class="muted small"><%= target.years && target.years.length ? `Cobrado em ${target.years.join(', ')}` : 'Priorizado pela matriz atual' %></p>
+        <div class="progress-mini"><span style="width:<%= target.progress || 0 %>%"></span></div>
+        <div class="card-actions"><a href="/treino?discipline=<%= encodeURIComponent(target.discipline) %>&topic=<%= encodeURIComponent(target.topic) %>">Treinar agora →</a></div>
+      </article>
+    <% }) %>
+  </div>
+</section>
 
 <%- include('partials/foot') %>
