@@ -6,33 +6,19 @@ const router = express.Router();
 const db = require('../db/db');
 const { extractTextFromPdf } = require('../services/pdfService');
 const { parseEdital, generatePracticeQuestions, explainQuestion } = require('../services/aiService');
-const {
-  canonicalDiscipline,
-  canonicalTopic,
-  rebuildSimilarity,
-  getRecurrences,
-  getRepeatedQuestions,
-  getPriorityMatrix,
-  recordAttempt
-} = require('../services/intelligenceEngine');
+const { canonicalDiscipline, canonicalTopic, rebuildSimilarity, getRecurrences, getRepeatedQuestions, getPriorityMatrix, recordAttempt } = require('../services/intelligenceEngine');
 
 const uploadDir = process.env.VERCEL ? path.join('/tmp', 'editais') : path.join(__dirname, '..', '..', 'uploads', 'editais');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } });
 
 async function listEditais(userId) {
-  return db.query(`
-    SELECT e.*, COUNT(et.id)::int topics_count
-    FROM editais e
-    LEFT JOIN edital_topics et ON et.edital_id=e.id
-    WHERE e.user_id=$1
-    GROUP BY e.id
-    ORDER BY e.ano DESC,e.created_at DESC
-  `, [userId]);
+  return db.query(`SELECT e.*,COUNT(et.id)::int topics_count FROM editais e LEFT JOIN edital_topics et ON et.edital_id=e.id WHERE e.user_id=$1 GROUP BY e.id ORDER BY e.ano DESC,e.created_at DESC`, [userId]);
 }
 
 router.get('/editais', async (req,res) => {
-  res.render('editais', { editais: await listEditais(req.session.userId), result: null });
+  const result = req.query.deleted === '1' ? { success: true, message: 'Edital excluído com sucesso.' } : null;
+  res.render('editais', { editais: await listEditais(req.session.userId), result });
 });
 
 router.get('/editais/:id', async (req,res) => {
@@ -66,28 +52,20 @@ router.post('/editais', upload.single('editalPdf'), async (req,res) => {
   }
 });
 
+router.post('/editais/:id/delete', async (req,res) => {
+  const deleted = await db.one('DELETE FROM editais WHERE id=$1 AND user_id=$2 RETURNING id', [req.params.id, req.session.userId]);
+  if (!deleted) return res.status(404).render('error', { message: 'Edital não encontrado ou você não tem permissão para excluí-lo.' });
+  res.redirect('/editais?deleted=1');
+});
+
 router.get('/recorrencias', async (req,res) => {
   res.render('recurrences', { recurrences: await getRecurrences(req.session.userId), repeated: await getRepeatedQuestions(req.session.userId) });
 });
-
-router.post('/recorrencias/recalcular', async (req,res) => {
-  await rebuildSimilarity(req.session.userId);
-  res.redirect('/recorrencias');
-});
-
-router.get('/estudar-hoje', async (req,res) => {
-  res.render('study_today', { priorities: await getPriorityMatrix(req.session.userId, 20) });
-});
+router.post('/recorrencias/recalcular', async (req,res) => { await rebuildSimilarity(req.session.userId); res.redirect('/recorrencias'); });
+router.get('/estudar-hoje', async (req,res) => { res.render('study_today', { priorities: await getPriorityMatrix(req.session.userId, 20) }); });
 
 async function findTrainingQuestions({ userId, discipline, topic, limit = 20 }) {
-  const rows = await db.query(`
-    SELECT q.*,e.ano
-    FROM questions q
-    LEFT JOIN exams e ON e.id=q.exam_id
-    WHERE (q.source='ai_practice' OR e.user_id IS NULL OR e.user_id=$1)
-    ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END,e.ano DESC NULLS LAST,q.id DESC
-    LIMIT 600
-  `, [userId]);
+  const rows = await db.query(`SELECT q.*,e.ano FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE (q.source='ai_practice' AND q.user_id=$1) OR (q.source<>'ai_practice' AND e.user_id=$1) ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END,e.ano DESC NULLS LAST,q.id DESC LIMIT 600`, [userId]);
   const targetDiscipline = canonicalDiscipline(discipline);
   const targetTopic = canonicalTopic(topic);
   return rows.filter(q => canonicalDiscipline(q.discipline) === targetDiscipline && canonicalTopic(q.topic) === targetTopic).slice(0, limit);
@@ -106,9 +84,7 @@ router.post('/treino/gerar', async (req,res) => {
   if (!discipline || !topic) throw new Error('Disciplina e assunto são obrigatórios.');
   const examples = (await findTrainingQuestions({ userId: req.session.userId, discipline, topic, limit: 8 })).filter(q => q.source !== 'ai_practice');
   const generated = await generatePracticeQuestions({ discipline, topic, count: 5, examples });
-  for (const q of generated) {
-    await db.query(`INSERT INTO questions(discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation,source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ai_practice')`, [canonicalDiscipline(discipline), canonicalTopic(topic), q.statement, q.alt_a, q.alt_b, q.alt_c, q.alt_d, q.alt_e || null, q.correct_letter, q.explanation || null]);
-  }
+  for (const q of generated) await db.query(`INSERT INTO questions(discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation,source,user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ai_practice',$11)`, [canonicalDiscipline(discipline), canonicalTopic(topic), q.statement, q.alt_a, q.alt_b, q.alt_c, q.alt_d, q.alt_e || null, q.correct_letter, q.explanation || null, req.session.userId]);
   res.redirect(`/treino?discipline=${encodeURIComponent(canonicalDiscipline(discipline))}&topic=${encodeURIComponent(canonicalTopic(topic))}`);
 });
 
@@ -116,38 +92,14 @@ router.post('/treino/:id/responder', async (req,res) => {
   const questionId = Number(req.params.id);
   const letter = String(req.body.letter || '').toUpperCase();
   if (!/^[A-E]$/.test(letter)) return res.status(400).json({ ok: false, error: 'Alternativa inválida.' });
-
-  const question = await db.one(`
-    SELECT q.*,e.user_id exam_user_id
-    FROM questions q
-    LEFT JOIN exams e ON e.id=q.exam_id
-    WHERE q.id=$1 AND (q.source='ai_practice' OR e.user_id IS NULL OR e.user_id=$2)
-  `, [questionId, req.session.userId]);
+  const question = await db.one(`SELECT q.*,e.user_id exam_user_id FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE q.id=$1 AND ((q.source='ai_practice' AND q.user_id=$2) OR (q.source<>'ai_practice' AND e.user_id=$2))`, [questionId, req.session.userId]);
   if (!question) return res.status(404).json({ ok: false, error: 'Questão não encontrada.' });
-
   const result = await recordAttempt({ userId: req.session.userId, questionId, letter, source: 'fixacao' });
   let explanation = String(question.explanation || '').trim();
   let explanationSource = explanation ? 'salva' : 'ia';
-
-  try {
-    // Para erro, sempre gera feedback específico sobre a alternativa marcada.
-    // Para acerto, reutiliza a explicação já salva quando ela existe.
-    if (!result.correct || !explanation) explanation = await explainQuestion(question, letter);
-  } catch (error) {
-    console.error('Falha ao gerar explicação da questão', questionId, error?.message || error);
-    if (!explanation) explanation = `O gabarito cadastrado é ${result.correctLetter}. Revise o conceito central de ${question.topic || question.discipline || 'esta questão'} e compare cada alternativa com o que o enunciado exige.`;
-    explanationSource = 'fallback';
-  }
-
-  res.json({
-    ok: true,
-    ...result,
-    chosenLetter: letter,
-    explanation,
-    explanationSource,
-    topic: question.topic,
-    discipline: question.discipline
-  });
+  try { if (!result.correct || !explanation) explanation = await explainQuestion(question, letter); }
+  catch (error) { console.error('Falha ao gerar explicação da questão', questionId, error?.message || error); if (!explanation) explanation = `O gabarito cadastrado é ${result.correctLetter}. Revise o conceito central de ${question.topic || question.discipline || 'esta questão'} e compare cada alternativa com o que o enunciado exige.`; explanationSource = 'fallback'; }
+  res.json({ ok:true,...result,chosenLetter:letter,explanation,explanationSource,topic:question.topic,discipline:question.discipline });
 });
 
 router.get('/caderno-erros', async (req,res) => {

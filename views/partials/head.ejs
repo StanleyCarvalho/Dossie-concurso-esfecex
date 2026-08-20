@@ -10,40 +10,43 @@
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/professional.css">
+  <link rel="stylesheet" href="/admin.css">
 </head>
 <body>
-<div class="mobile-topbar">
-  <div class="mobile-brand"><span class="brand-mark">EP</span><span><strong>ESFCEx</strong><small>Dossiê de preparação</small></span></div>
-  <button class="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" data-menu-toggle><span></span><span></span><span></span></button>
-</div>
+<div class="mobile-topbar"><div class="mobile-brand"><span class="brand-mark">EP</span><span><strong>ESFCEx</strong><small>Dossiê de preparação</small></span></div><button class="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" data-menu-toggle><span></span><span></span><span></span></button></div>
 <div class="menu-backdrop" data-menu-backdrop></div>
 <div class="app">
   <aside class="sidebar" data-sidebar>
-    <div class="sidebar-top">
-      <div class="brand"><span class="brand-mark">EP</span><span>DOSSIÊ DE PREPARAÇÃO<span class="title">ESFCEx · Informática</span></span></div>
-      <button class="sidebar-close" type="button" aria-label="Fechar menu" data-menu-close>×</button>
-    </div>
+    <div class="sidebar-top"><div class="brand"><span class="brand-mark">EP</span><span>DOSSIÊ DE PREPARAÇÃO<span class="title">ESFCEx · Informática</span></span></div><button class="sidebar-close" type="button" aria-label="Fechar menu" data-menu-close>×</button></div>
     <nav class="nav">
-      <span class="nav-section">Visão estratégica</span>
-      <a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>"><span class="num">01</span>Painel geral</a>
-      <a href="/proxima-prova" class="<%= active === 'proxima' ? 'active' : '' %>"><span class="num">02</span>Possível próxima prova</a>
-      <a href="/previsao-ia" class="<%= active === 'previsao' ? 'active' : '' %>"><span class="num">03</span>Previsão IA calibrada</a>
-      <a href="/analise" class="<%= active === 'analise' ? 'active' : '' %>"><span class="num">04</span>Análise de padrões</a>
-      <span class="nav-section">Plano e execução</span>
-      <a href="/plano-estudos" class="<%= active === 'plano' ? 'active' : '' %>"><span class="num">05</span>Plano diário e semanal</a>
-      <a href="/estudar-hoje" class="<%= active === 'hoje' ? 'active' : '' %>"><span class="num">06</span>O que estudar hoje</a>
-      <a href="/treino" class="<%= active === 'treino' ? 'active' : '' %>"><span class="num">07</span>Treino por assunto</a>
-      <a href="/caderno-erros" class="<%= active === 'erros' ? 'active' : '' %>"><span class="num">08</span>Caderno de erros</a>
-      <a href="/simulados" class="<%= active === 'simulados' ? 'active' : '' %>"><span class="num">09</span>Simulados</a>
-      <span class="nav-section">Banco e evidências</span>
-      <a href="/editais" class="<%= active === 'editais' ? 'active' : '' %>"><span class="num">10</span>Editais</a>
-      <a href="/questoes-repetidas" class="<%= active === 'repetidas' ? 'active' : '' %>"><span class="num">11</span>Repetidas por assunto</a>
-      <a href="/recorrencias" class="<%= active === 'recorrencias' ? 'active' : '' %>"><span class="num">12</span>Questões recorrentes</a>
-      <a href="/dificuldade" class="<%= active === 'dificuldade' ? 'active' : '' %>"><span class="num">13</span>Dificuldade das questões</a>
-      <a href="/questoes" class="<%= active === 'questoes' ? 'active' : '' %>"><span class="num">14</span>Banco de questões</a>
-      <a href="/import" class="<%= active === 'import' ? 'active' : '' %>"><span class="num">15</span>Importar provas</a>
+      <% if(user && user.role === 'admin'){ %>
+        <span class="nav-section">Administração</span>
+        <a href="/admin/usuarios" class="<%= active === 'admin' ? 'active' : '' %>"><span class="num">A1</span>Aprovação de usuários</a>
+        <a href="/minha-conta" class="<%= active === 'conta' ? 'active' : '' %>"><span class="num">A2</span>Minha conta</a>
+      <% } else { %>
+        <span class="nav-section">Visão estratégica</span>
+        <a href="/" class="<%= active === 'dashboard' ? 'active' : '' %>"><span class="num">01</span>Painel geral</a>
+        <a href="/proxima-prova" class="<%= active === 'proxima' ? 'active' : '' %>"><span class="num">02</span>Possível próxima prova</a>
+        <a href="/previsao-ia" class="<%= active === 'previsao' ? 'active' : '' %>"><span class="num">03</span>Previsão IA calibrada</a>
+        <a href="/analise" class="<%= active === 'analise' ? 'active' : '' %>"><span class="num">04</span>Análise de padrões</a>
+        <span class="nav-section">Plano e execução</span>
+        <a href="/plano-estudos" class="<%= active === 'plano' ? 'active' : '' %>"><span class="num">05</span>Plano diário e semanal</a>
+        <a href="/estudar-hoje" class="<%= active === 'hoje' ? 'active' : '' %>"><span class="num">06</span>O que estudar hoje</a>
+        <a href="/treino" class="<%= active === 'treino' ? 'active' : '' %>"><span class="num">07</span>Treino por assunto</a>
+        <a href="/caderno-erros" class="<%= active === 'erros' ? 'active' : '' %>"><span class="num">08</span>Caderno de erros</a>
+        <a href="/simulados" class="<%= active === 'simulados' ? 'active' : '' %>"><span class="num">09</span>Simulados</a>
+        <span class="nav-section">Banco e evidências</span>
+        <a href="/editais" class="<%= active === 'editais' ? 'active' : '' %>"><span class="num">10</span>Editais</a>
+        <a href="/questoes-repetidas" class="<%= active === 'repetidas' ? 'active' : '' %>"><span class="num">11</span>Repetidas por assunto</a>
+        <a href="/recorrencias" class="<%= active === 'recorrencias' ? 'active' : '' %>"><span class="num">12</span>Questões recorrentes</a>
+        <a href="/dificuldade" class="<%= active === 'dificuldade' ? 'active' : '' %>"><span class="num">13</span>Dificuldade das questões</a>
+        <a href="/questoes" class="<%= active === 'questoes' ? 'active' : '' %>"><span class="num">14</span>Banco de questões</a>
+        <a href="/import" class="<%= active === 'import' ? 'active' : '' %>"><span class="num">15</span>Importar provas</a>
+        <span class="nav-section">Perfil</span>
+        <a href="/minha-conta" class="<%= active === 'conta' ? 'active' : '' %>"><span class="num">16</span>Minha conta</a>
+      <% } %>
     </nav>
-    <% if (user) { %><div class="user-box"><strong><%= user.name || user.email %></strong><span><%= user.email %></span><form method="POST" action="/logout"><button class="btn secondary" type="submit">Sair</button></form></div><% } %>
-    <div class="stamp">BANCA: VUNESP<br>CARGO: INFORMÁTICA</div>
+    <% if (user) { %><div class="user-box"><strong><%= user.name || user.email %></strong><span><%= user.role === 'admin' ? 'Administrador' : 'Aluno' %> · <%= user.email %></span><% if(user.role !== 'admin' && user.access_until){ %><span class="access-until">Acesso até <%= new Date(user.access_until).toLocaleDateString('pt-BR') %></span><% } %><form method="POST" action="/logout"><button class="btn secondary" type="submit">Sair</button></form></div><% } %>
+    <div class="stamp"><%= user && user.role === 'admin' ? 'PAINEL ADMINISTRATIVO' : 'BANCA: VUNESP<br>CARGO: INFORMÁTICA' %></div>
   </aside>
   <main class="main">
