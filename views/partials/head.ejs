@@ -49,6 +49,6 @@
       <% } %>
     </nav>
     <% if (user) { %><div class="user-box"><strong><%= user.name || user.email %></strong><span><%= user.role === 'admin' ? 'Administrador' : 'Aluno' %> · <%= user.email %></span><% if(user.role !== 'admin' && user.access_until){ %><span class="access-until">Acesso até <%= new Date(user.access_until).toLocaleDateString('pt-BR') %></span><% } %><form method="POST" action="/logout"><button class="btn secondary" type="submit">Sair</button></form></div><% } %>
-    <div class="stamp"><%= user && user.role === 'admin' ? 'PAINEL ADMINISTRATIVO' : 'BANCA: VUNESP<br>CARGO: INFORMÁTICA' %></div>
+    <div class="stamp"><%= user && user.role === 'admin' ? 'PAINEL ADMINISTRATIVO' : 'BANCA: VUNESP · CARGO: INFORMÁTICA' %></div>
   </aside>
   <main class="main">
