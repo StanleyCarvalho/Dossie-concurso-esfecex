@@ -1,133 +1,14 @@
 <%- include('partials/head') %>
-
-<div class="page-header page-header--split">
-  <div>
-    <span class="eyebrow">Execução diária + cobertura semanal</span>
-    <h1>Plano de estudos</h1>
-    <p class="muted">Prioriza o que mais cai sem abandonar nenhum tópico do edital. Cada ciclo combina teoria, questões, correção de erros e revisão.</p>
-  </div>
-  <form method="POST" action="/plano-estudos/gerar">
-    <button class="btn" type="submit">Recalcular plano completo</button>
-  </form>
-</div>
-
-<% if (querySaved === 'plan') { %><div class="notice success">Plano recalculado e salvo com as prioridades atuais.</div><% } %>
-<% if (querySaved === 'agenda') { %><div class="notice success">Disponibilidade semanal atualizada.</div><% } %>
-
-<div class="kpi-grid">
-  <article class="card stat"><div class="value"><%= weeklySchedule.editalCoverage %>%</div><div class="label">Cobertura do edital</div><div class="progress-mini"><span style="width:<%= weeklySchedule.editalCoverage %>%"></span></div></article>
-  <article class="card stat"><div class="value"><%= weeklySchedule.editalDone %>/<%= weeklySchedule.totalEdital %></div><div class="label">Tópicos concluídos</div><p class="muted small">Base: <%= edital ? `Edital ${edital.ano}` : 'nenhum edital importado' %></p></article>
-  <article class="card stat"><div class="value"><%= Math.round(weeklySchedule.totalWeeklyMinutes / 60 * 10) / 10 %>h</div><div class="label">Carga semanal</div><p class="muted small"><%= selectedDays.length %> dia(s) de estudo</p></article>
-  <article class="card stat"><div class="value"><%= weeklySchedule.weeksToCover || 0 %></div><div class="label">Semanas estimadas</div><p class="muted small">Para passar pelos tópicos ainda pendentes</p></article>
-</div>
-
-<section class="card planner-card section-gap">
-  <div class="planner-head">
-    <div>
-      <span class="eyebrow">Configuração</span>
-      <h2>Minha semana de estudo</h2>
-      <p class="muted">Defina os dias e a carga. O cronograma distribui primeiro os tópicos obrigatórios do edital com maior incidência e depois cobre os demais.</p>
-    </div>
-    <div class="planner-total mono"><%= Math.round(weeklySchedule.totalWeeklyMinutes / 60 * 10) / 10 %>h/semana</div>
-  </div>
-  <form method="POST" action="/plano-estudos/agenda/salvar" class="availability-form">
-    <div class="day-picker">
-      <% Object.entries(dayLabels).forEach(([key, label]) => { %>
-        <label class="day-chip"><input type="checkbox" name="days" value="<%= key %>" <%= selectedDays.includes(key) ? 'checked' : '' %>><span><%= label.slice(0, 3) %></span></label>
-      <% }) %>
-    </div>
-    <label class="hours-field">Horas por dia<input type="number" name="hoursPerDay" min="0.5" max="12" step="0.5" value="<%= hoursPerDay %>"></label>
-    <button class="btn" type="submit">Atualizar agenda</button>
-  </form>
-</section>
-
-<section class="section-gap">
-  <div class="section-title-row">
-    <div><span class="eyebrow">Execução imediata</span><h2>Estudo de hoje</h2></div>
-    <span class="tag gold"><%= todayBlocks.reduce((sum,b)=>sum+b.minutes,0) %> min planejados</span>
-  </div>
-  <% if (!todayBlocks.length) { %>
-    <div class="empty">Hoje não há bloco planejado. Ajuste seus dias acima ou use a agenda semanal para adiantar o próximo tópico.</div>
-  <% } else { %>
-    <div class="today-grid">
-      <% todayBlocks.forEach((block, idx) => { %>
-        <article class="card today-card">
-          <div class="card-headline"><span class="step-number"><%= idx + 1 %></span><div><span class="tag <%= block.editalRequired ? 'gold' : '' %>"><%= block.editalRequired ? 'EDITAL' : 'HISTÓRICO' %></span><h3><%= t(block.discipline) %></h3></div><strong class="mono"><%= block.minutes %> min</strong></div>
-          <h4><%= t(block.topic) %></h4>
-          <ul class="task-list"><% block.tasks.forEach(task => { %><li><%= t(task) %></li><% }) %></ul>
-          <div class="card-actions"><a class="btn secondary" href="/treino?discipline=<%= encodeURIComponent(block.discipline) %>&topic=<%= encodeURIComponent(block.topic) %>">Resolver questões</a><% if (block.sourceUrl) { %><a href="<%= block.sourceUrl %>" <%= block.sourceUrl.startsWith('http') ? 'target="_blank" rel="noopener"' : '' %>>Material de estudo</a><% } %></div>
-        </article>
-      <% }) %>
-    </div>
-  <% } %>
-</section>
-
-<section class="section-gap">
-  <div class="section-title-row">
-    <div><span class="eyebrow">Visão operacional</span><h2>Agenda da semana</h2></div>
-    <span class="muted small"><%= weeklySchedule.scheduledTopics || 0 %> tópico(s) nesta semana · <%= weeklySchedule.pendingTopics || 0 %> pendente(s)</span>
-  </div>
-  <% if (!weeklySchedule.blocks.length) { %>
-    <div class="empty">Selecione pelo menos um dia de estudo para montar sua semana.</div>
-  <% } else { %>
-    <div class="schedule-grid">
-      <% weeklySchedule.studyDays.forEach(day => { const dayBlocks = weeklySchedule.blocks.filter(block => block.day === day); %>
-        <section class="schedule-day">
-          <div class="schedule-day-head"><h3><%= dayLabels[day] %></h3><span class="mono"><%= dayBlocks.reduce((sum,b)=>sum+b.minutes,0) %> min</span></div>
-          <% dayBlocks.forEach(block => { %>
-            <article class="schedule-block">
-              <div class="schedule-time mono"><%= block.minutes %>m</div>
-              <div>
-                <div class="tags-line"><span class="tag <%= block.editalRequired ? 'gold' : '' %>"><%= block.editalRequired ? 'EDITAL' : 'HIST.' %></span><span class="tag"><%= block.confidence %></span></div>
-                <strong><%= t(block.discipline) %></strong>
-                <span class="topic-line"><%= t(block.topic) %></span>
-                <div class="progress-mini"><span style="width:<%= block.progress %>%"></span></div>
-                <a href="/treino?discipline=<%= encodeURIComponent(block.discipline) %>&topic=<%= encodeURIComponent(block.topic) %>">Treinar assunto →</a>
-              </div>
-            </article>
-          <% }) %>
-        </section>
-      <% }) %>
-    </div>
-  <% } %>
-</section>
-
-<section class="card section-gap">
-  <div class="section-title-row">
-    <div><span class="eyebrow">Checklist do edital</span><h2>Cobertura completa</h2></div>
-    <% if (edital) { %><a href="/editais/<%= edital.id %>">Abrir edital analisado →</a><% } %>
-  </div>
-  <% if (!edital) { %>
-    <div class="empty">Importe o edital mais recente para o sistema garantir cobertura de 100% do conteúdo programático.</div>
-  <% } else { %>
-    <div class="coverage-list">
-      <% weeklySchedule.queue.filter(item => item.editalRequired).forEach(item => { %>
-        <article class="coverage-row">
-          <div class="coverage-main"><span class="status-dot <%= Number(item.progress||0) >= 100 ? 'done' : Number(item.progress||0) > 0 ? 'doing' : '' %>"></span><div><strong><%= t(item.discipline) %></strong><span><%= t(item.topic) %></span></div></div>
-          <div class="coverage-priority"><span class="tag"><%= item.sourceType === 'edital+historico' ? 'EDITAL + RECORRÊNCIA' : 'EDITAL' %></span><span class="mono"><%= Math.round(item.priority || item.score || 0) %></span></div>
-          <form method="POST" action="/progresso" class="coverage-progress">
-            <input type="hidden" name="discipline" value="<%= item.discipline %>"><input type="hidden" name="topic" value="<%= item.topic %>">
-            <input aria-label="Progresso em <%= item.topic %>" type="range" name="progress" min="0" max="100" step="5" value="<%= item.progress || 0 %>"><strong class="mono"><%= item.progress || 0 %>%</strong><button class="btn secondary" type="submit">Salvar</button>
-          </form>
-        </article>
-      <% }) %>
-    </div>
-  <% } %>
-</section>
-
-<section class="section-gap">
-  <div class="section-title-row"><div><span class="eyebrow">Prioridade inteligente</span><h2>Assuntos que merecem mais tempo</h2></div></div>
-  <div class="priority-grid">
-    <% studyTargets.slice(0, 12).forEach((target, idx) => { %>
-      <article class="card priority-card">
-        <div class="priority-top"><span class="step-number"><%= idx + 1 %></span><strong class="score-pill"><%= target.score %></strong></div>
-        <span class="tag gold"><%= t(target.discipline) %></span><h3><%= t(target.topic) %></h3>
-        <p class="muted small"><%= target.years && target.years.length ? `Cobrado em ${target.years.join(', ')}` : 'Priorizado pela matriz atual' %></p>
-        <div class="progress-mini"><span style="width:<%= target.progress || 0 %>%"></span></div>
-        <div class="card-actions"><a href="/treino?discipline=<%= encodeURIComponent(target.discipline) %>&topic=<%= encodeURIComponent(target.topic) %>">Treinar agora →</a></div>
-      </article>
-    <% }) %>
-  </div>
-</section>
-
+<% const mk=(d,t)=>String(d||'').toLowerCase()+'||'+String(t||'').toLowerCase(); const todayDone=todayChecklist.filter(i=>i.completed).length; const todayPct=todayChecklist.length?Math.round(todayDone/todayChecklist.length*100):0; %>
+<div class="page-header page-header--split"><div><span class="eyebrow">Plano adaptativo baseado em evidências</span><h1>Plano de estudos</h1><p class="muted">O checklist diário, seus acertos/erros e a recorrência das últimas provas recalibram automaticamente a próxima semana.</p></div><form method="POST" action="/plano-estudos/gerar"><button class="btn" type="submit">Recalcular com meu desempenho</button></form></div>
+<% if(querySaved==='plan'){%><div class="notice success">Plano recalculado com recorrência histórica, checklist e desempenho nas questões.</div><%}%><% if(querySaved==='agenda'){%><div class="notice success">Disponibilidade semanal atualizada.</div><%}%>
+<div class="kpi-grid"><article class="card stat"><div class="value"><%= weeklySchedule.editalCoverage %>%</div><div class="label">Cobertura do edital</div><div class="progress-mini"><span style="width:<%= weeklySchedule.editalCoverage %>%"></span></div></article><article class="card stat"><div class="value"><%= todayPct %>%</div><div class="label">Checklist de hoje</div><p class="muted small"><%= todayDone %>/<%= todayChecklist.length %> etapas concluídas</p></article><article class="card stat"><div class="value"><%= Math.round(weeklySchedule.totalWeeklyMinutes/6)/10 %>h</div><div class="label">Carga semanal</div><p class="muted small"><%= selectedDays.length %> dias de estudo</p></article><article class="card stat"><div class="value"><%= weeklySchedule.weeksToCover||0 %></div><div class="label">Semanas estimadas</div><p class="muted small">Recalculadas conforme sua evolução</p></article></div>
+<section class="card planner-card section-gap"><div class="planner-head"><div><span class="eyebrow">Configuração</span><h2>Minha semana de estudo</h2><p class="muted">O sistema distribui o edital inteiro, mas aumenta o tempo dos assuntos recorrentes em que seu checklist ou suas questões mostram dificuldade.</p></div><div class="planner-total mono"><%= Math.round(weeklySchedule.totalWeeklyMinutes/6)/10 %>h/semana</div></div><form method="POST" action="/plano-estudos/agenda/salvar" class="availability-form"><div class="day-picker"><% Object.entries(dayLabels).forEach(([key,label])=>{%><label class="day-chip"><input type="checkbox" name="days" value="<%= key %>" <%= selectedDays.includes(key)?'checked':'' %>><span><%= label.slice(0,3) %></span></label><%})%></div><label class="hours-field">Horas por dia<input type="number" name="hoursPerDay" min="0.5" max="12" step="0.5" value="<%= hoursPerDay %>"></label><button class="btn" type="submit">Atualizar agenda</button></form></section>
+<section class="section-gap"><div class="section-title-row"><div><span class="eyebrow">Checklist diário</span><h2>O que estudar hoje</h2></div><span class="tag gold"><%= todayPct %>% concluído</span></div><% if(!todayChecklist.length){%><div class="empty">Hoje não há etapas programadas. Ajuste sua agenda ou recalcule o plano.</div><%}else{%><div class="daily-checklist"><% let lastGroup=''; todayChecklist.forEach(item=>{const group=item.discipline+'||'+item.topic;if(group!==lastGroup){lastGroup=group;%><div class="checklist-group-title"><div><span class="tag gold"><%= t(item.discipline) %></span><strong><%= t(item.topic) %></strong></div><a href="/treino?discipline=<%= encodeURIComponent(item.discipline) %>&topic=<%= encodeURIComponent(item.topic) %>">Treinar →</a></div><%}%><article class="checklist-item <%= item.completed?'is-done':'' %>" data-check-id="<%= item.id %>"><button class="study-check" type="button" aria-label="Marcar etapa" onclick="toggleStudy(<%= item.id %>,this)"><span><%= item.completed?'✓':'' %></span></button><div class="check-main"><strong><%= t(item.microtopic) %></strong><div class="check-meta"><span class="tag"><%= item.task_type==='teoria'?'ESTUDAR':item.task_type==='questoes'?'QUESTÕES':'REVISAR' %></span><span><%= item.planned_minutes %> min</span></div><% if(item.task_type==='teoria'&&item.resource_url){%><a class="resource-link" href="<%= item.resource_url %>" target="_blank" rel="noopener"><%= item.resource_title||'Material gratuito' %> ↗</a><%}%></div></article><%})%></div><%}%></section>
+<section class="card section-gap"><div class="section-title-row"><div><span class="eyebrow">Desempenho acumulado</span><h2>Onde estou forte e onde preciso insistir</h2></div><span class="muted small">Checklist + desempenho em questões</span></div><% if(!performance.length){%><div class="empty">Seu gráfico será preenchido conforme você marcar o checklist e responder questões.</div><%}else{%><div class="performance-chart"><% performance.slice(0,12).forEach(row=>{%><div class="performance-row"><div class="performance-label"><strong><%= t(row.discipline) %></strong><span><%= row.performance %>% domínio · <%= row.accuracy %>% acertos · <%= row.checklist %>% execução</span></div><div class="performance-track"><span style="width:<%= row.performance %>%"></span></div><strong class="mono"><%= row.need %>% a reforçar</strong></div><%})%></div><%}%></section>
+<section class="section-gap"><div class="section-title-row"><div><span class="eyebrow">Foco cirúrgico</span><h2>Assuntos destrinchados pelo padrão das provas</h2></div><span class="muted small">Estude o microtópico, não apenas o título geral</span></div><div class="priority-grid"><% studyTargets.slice(0,9).forEach((target,idx)=>{const micros=microMap[mk(target.discipline,target.topic)]||[];%><article class="card priority-card"><div class="priority-top"><span class="step-number"><%= idx+1 %></span><strong class="score-pill"><%= target.score %></strong></div><span class="tag gold"><%= t(target.discipline) %></span><h3><%= t(target.topic) %></h3><p class="muted small"><%= target.years?.length?`Cobrado em ${target.years.join(', ')}`:'Priorizado pela matriz atual' %></p><ol class="microtopic-list"><% micros.slice(0,5).forEach(m=>{%><li><strong><%= t(m.microtopic) %></strong><a href="<%= m.url %>" target="_blank" rel="noopener"><%= m.provider %> · estudar grátis ↗</a></li><%})%></ol><div class="card-actions"><a class="btn secondary" href="/treino?discipline=<%= encodeURIComponent(target.discipline) %>&topic=<%= encodeURIComponent(target.topic) %>">Questões desse assunto</a></div></article><%})%></div></section>
+<section class="section-gap"><div class="section-title-row"><div><span class="eyebrow">Visão operacional</span><h2>Agenda adaptativa da semana</h2></div><span class="muted small"><%= weeklySchedule.scheduledTopics||0 %> assuntos · <%= weeklySchedule.pendingTopics||0 %> pendentes</span></div><div class="schedule-grid"><% weeklySchedule.studyDays.forEach(day=>{const dayBlocks=weeklySchedule.blocks.filter(b=>b.day===day);%><section class="schedule-day"><div class="schedule-day-head"><h3><%= dayLabels[day] %></h3><span class="mono"><%= dayBlocks.reduce((s,b)=>s+b.minutes,0) %> min</span></div><% dayBlocks.forEach(block=>{%><article class="schedule-block"><div class="schedule-time mono"><%= block.minutes %>m</div><div><div class="tags-line"><span class="tag <%= block.editalRequired?'gold':'' %>"><%= block.editalRequired?'EDITAL':'HIST.' %></span><% if(block.adaptiveSignal){%><span class="tag">exec. <%= block.adaptiveSignal.completionRate %>% · acertos <%= block.adaptiveSignal.accuracy %>%</span><%}%></div><strong><%= t(block.discipline) %></strong><span class="topic-line"><%= t(block.topic) %></span><div class="progress-mini"><span style="width:<%= block.progress %>%"></span></div><a href="/treino?discipline=<%= encodeURIComponent(block.discipline) %>&topic=<%= encodeURIComponent(block.topic) %>">Treinar assunto →</a></div></article><%})%></section><%})%></div></section>
+<section class="card section-gap"><div class="section-title-row"><div><span class="eyebrow">Histórico de execução</span><h2>Consistência dos últimos dias</h2></div></div><% if(!history.length){%><div class="empty">Ao concluir o checklist diário, seu histórico aparecerá aqui e alimentará o próximo planejamento.</div><%}else{%><div class="history-bars"><% history.slice(0,14).reverse().forEach(day=>{%><div class="history-day" title="<%= day.date %>: <%= day.done %>/<%= day.planned %>"><div class="history-bar"><span style="height:<%= day.completion||0 %>%"></span></div><small><%= String(day.date).slice(5) %></small><strong><%= day.completion||0 %>%</strong></div><%})%></div><%}%></section>
+<section class="card section-gap"><div class="section-title-row"><div><span class="eyebrow">Checklist do edital</span><h2>Cobertura completa</h2></div><% if(edital){%><a href="/editais/<%= edital.id %>">Abrir edital →</a><%}%></div><% if(!edital){%><div class="empty">Importe o edital mais recente para o sistema garantir cobertura de todo o conteúdo programático.</div><%}else{%><div class="coverage-list"><% weeklySchedule.queue.filter(i=>i.editalRequired).forEach(item=>{%><article class="coverage-row"><div class="coverage-main"><span class="status-dot <%= Number(item.progress||0)>=100?'done':Number(item.progress||0)>0?'doing':'' %>"></span><div><strong><%= t(item.discipline) %></strong><span><%= t(item.topic) %></span></div></div><div class="coverage-priority"><span class="tag"><%= item.sourceType==='edital+historico'?'EDITAL + RECORRÊNCIA':'EDITAL' %></span><span class="mono"><%= Math.round(item.priority||item.score||0) %></span></div><form method="POST" action="/progresso" class="coverage-progress"><input type="hidden" name="discipline" value="<%= item.discipline %>"><input type="hidden" name="topic" value="<%= item.topic %>"><input type="range" name="progress" min="0" max="100" step="5" value="<%= item.progress||0 %>"><strong class="mono"><%= item.progress||0 %>%</strong><button class="btn secondary" type="submit">Salvar</button></form></article><%})%></div><%}%></section>
+<script>async function toggleStudy(id,btn){const card=btn.closest('.checklist-item'),next=!card.classList.contains('is-done');btn.disabled=true;try{const r=await fetch('/plano-estudos/checklist/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({completed:next})});const data=await r.json();if(data.ok){card.classList.toggle('is-done',data.completed);btn.querySelector('span').textContent=data.completed?'✓':'';setTimeout(()=>location.reload(),250)}}finally{btn.disabled=false}}</script>
 <%- include('partials/foot') %>
