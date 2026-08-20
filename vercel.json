@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
+  "git": {
+    "deploymentEnabled": false
+  },
   "functions": {
     "server.js": {
       "maxDuration": 60
