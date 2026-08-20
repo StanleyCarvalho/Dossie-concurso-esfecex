@@ -1,22 +1,150 @@
-const express=require('express');
-const multer=require('multer');
-const path=require('path');
-const fs=require('fs');
-const router=express.Router();
-const db=require('../db/db');
-const {extractTextFromPdf}=require('../services/pdfService');
-const {parseEdital,generatePracticeQuestions}=require('../services/aiService');
-const {rebuildSimilarity,getRecurrences,getRepeatedQuestions,getPriorityMatrix,recordAttempt}=require('../services/intelligenceEngine');
-const uploadDir=process.env.VERCEL?path.join('/tmp','editais'):path.join(__dirname,'..','..','uploads','editais');fs.mkdirSync(uploadDir,{recursive:true});
-const upload=multer({dest:uploadDir,limits:{fileSize:25*1024*1024}});
-async function listEditais(userId){return db.query(`SELECT e.*,COUNT(et.id)::int topics_count FROM editais e LEFT JOIN edital_topics et ON et.edital_id=e.id WHERE e.user_id=$1 GROUP BY e.id ORDER BY e.ano DESC,e.created_at DESC`,[userId])}
-router.get('/editais',async(req,res)=>res.render('editais',{editais:await listEditais(req.session.userId),result:null}));
-router.post('/editais',upload.single('editalPdf'),async(req,res)=>{try{if(!req.file)throw new Error('Selecione o PDF do edital.');const raw=await extractTextFromPdf(req.file.path);const parsed=await parseEdital(raw,req.body);if(!Array.isArray(parsed.topics)||!parsed.topics.length)throw new Error('Nenhum conteúdo programático foi identificado no edital.');const edital=await db.one(`INSERT INTO editais(user_id,ano,banca,cargo,filename,raw_text) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,[req.session.userId,Number(req.body.ano),req.body.banca||'VUNESP',req.body.cargo||'Informática',req.file.originalname,raw]);for(const t of parsed.topics)await db.query(`INSERT INTO edital_topics(edital_id,discipline,topic,subtopic,reference_text,weight) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[edital.id,t.discipline,t.topic,t.subtopic||'',t.reference_text||'',Number(t.weight)||1]);fs.unlinkSync(req.file.path);res.redirect('/editais')}catch(e){if(req.file&&fs.existsSync(req.file.path))fs.unlinkSync(req.file.path);res.status(400).render('editais',{editais:await listEditais(req.session.userId),result:{error:e.message}})}});
-router.get('/recorrencias',async(req,res)=>res.render('recurrences',{recurrences:await getRecurrences(req.session.userId),repeated:await getRepeatedQuestions(req.session.userId)}));
-router.post('/recorrencias/recalcular',async(req,res)=>{await rebuildSimilarity(req.session.userId);res.redirect('/recorrencias')});
-router.get('/estudar-hoje',async(req,res)=>res.render('study_today',{priorities:await getPriorityMatrix(req.session.userId,20)}));
-router.get('/treino',async(req,res)=>{const discipline=String(req.query.discipline||'').trim(),topic=String(req.query.topic||'').trim();let questions=[];if(discipline&&topic)questions=await db.query(`SELECT q.*,e.ano FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE q.discipline=$1 AND lower(q.topic)=lower($2) AND (q.source='ai_practice' OR e.user_id IS NULL OR e.user_id=$3) ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END,e.ano DESC NULLS LAST,q.id DESC LIMIT 20`,[discipline,topic,req.session.userId]);res.render('training',{discipline,topic,questions})});
-router.post('/treino/gerar',async(req,res)=>{const discipline=String(req.body.discipline||'').trim(),topic=String(req.body.topic||'').trim();if(!discipline||!topic)throw new Error('Disciplina e assunto são obrigatórios.');const examples=await db.query(`SELECT statement,alt_a,alt_b,alt_c,alt_d,alt_e,style_notes FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE q.source!='ai_practice' AND q.discipline=$1 AND lower(q.topic)=lower($2) AND (e.user_id IS NULL OR e.user_id=$3) ORDER BY e.ano DESC LIMIT 8`,[discipline,topic,req.session.userId]);const generated=await generatePracticeQuestions({discipline,topic,count:5,examples});for(const q of generated)await db.query(`INSERT INTO questions(discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation,source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ai_practice')`,[discipline,topic,q.statement,q.alt_a,q.alt_b,q.alt_c,q.alt_d,q.alt_e||null,q.correct_letter,q.explanation||null]);res.redirect(`/treino?discipline=${encodeURIComponent(discipline)}&topic=${encodeURIComponent(topic)}`)});
-router.post('/treino/:id/responder',async(req,res)=>{const result=await recordAttempt({userId:req.session.userId,questionId:Number(req.params.id),letter:req.body.letter,source:'fixacao'});res.json({ok:true,...result})});
-router.get('/caderno-erros',async(req,res)=>{const errors=await db.query(`SELECT qa.*,q.statement,q.discipline,q.topic,q.correct_letter,e.ano FROM question_attempts qa JOIN questions q ON q.id=qa.question_id LEFT JOIN exams e ON e.id=q.exam_id WHERE qa.user_id=$1 AND qa.correct=false ORDER BY qa.answered_at DESC LIMIT 200`,[req.session.userId]);res.render('error_notebook',{errors})});
-module.exports=router;
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const router = express.Router();
+const db = require('../db/db');
+const { extractTextFromPdf } = require('../services/pdfService');
+const { parseEdital, generatePracticeQuestions } = require('../services/aiService');
+const {
+  canonicalDiscipline,
+  canonicalTopic,
+  rebuildSimilarity,
+  getRecurrences,
+  getRepeatedQuestions,
+  getPriorityMatrix,
+  recordAttempt
+} = require('../services/intelligenceEngine');
+
+const uploadDir = process.env.VERCEL ? path.join('/tmp', 'editais') : path.join(__dirname, '..', '..', 'uploads', 'editais');
+fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } });
+
+async function listEditais(userId) {
+  return db.query(`
+    SELECT e.*, COUNT(et.id)::int topics_count
+    FROM editais e
+    LEFT JOIN edital_topics et ON et.edital_id = e.id
+    WHERE e.user_id = $1
+    GROUP BY e.id
+    ORDER BY e.ano DESC, e.created_at DESC
+  `, [userId]);
+}
+
+router.get('/editais', async (req, res) => {
+  res.render('editais', { editais: await listEditais(req.session.userId), result: null });
+});
+
+router.get('/editais/:id', async (req, res) => {
+  const edital = await db.one('SELECT * FROM editais WHERE id=$1 AND user_id=$2', [req.params.id, req.session.userId]);
+  if (!edital) return res.status(404).render('error', { message: 'Edital não encontrado.' });
+  const topics = await db.query('SELECT * FROM edital_topics WHERE edital_id=$1 ORDER BY discipline,topic,subtopic', [edital.id]);
+  const priorities = await getPriorityMatrix(req.session.userId, 100);
+  const priorityMap = new Map(priorities.map(p => [`${canonicalDiscipline(p.discipline)}||${canonicalTopic(p.topic)}`, p]));
+  const enriched = topics.map(t => ({
+    ...t,
+    priority: priorityMap.get(`${canonicalDiscipline(t.discipline)}||${canonicalTopic(t.topic)}`) || null
+  }));
+  res.render('edital_detail', { edital, topics: enriched });
+});
+
+router.post('/editais', upload.single('editalPdf'), async (req, res) => {
+  try {
+    if (!req.file) throw new Error('Selecione o PDF do edital.');
+    const ano = Number(req.body.ano);
+    if (!Number.isInteger(ano) || ano < 2000 || ano > 2100) throw new Error('Informe um ano válido.');
+    const raw = await extractTextFromPdf(req.file.path);
+    const parsed = await parseEdital(raw, req.body);
+    if (!Array.isArray(parsed.topics) || !parsed.topics.length) throw new Error('Nenhum conteúdo programático foi identificado no edital.');
+
+    const edital = await db.one(`
+      INSERT INTO editais(user_id,ano,banca,cargo,filename,raw_text)
+      VALUES($1,$2,$3,$4,$5,$6) RETURNING id
+    `, [req.session.userId, ano, req.body.banca || 'VUNESP', req.body.cargo || 'Informática', req.file.originalname, raw]);
+
+    for (const t of parsed.topics) {
+      if (!t.discipline || !t.topic) continue;
+      await db.query(`
+        INSERT INTO edital_topics(edital_id,discipline,topic,subtopic,reference_text,weight)
+        VALUES($1,$2,$3,$4,$5,$6)
+        ON CONFLICT DO NOTHING
+      `, [edital.id, t.discipline, t.topic, t.subtopic || '', t.reference_text || '', Number(t.weight) || 1]);
+    }
+    fs.unlinkSync(req.file.path);
+    res.redirect(`/editais/${edital.id}`);
+  } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(400).render('editais', { editais: await listEditais(req.session.userId), result: { error: error.message } });
+  }
+});
+
+router.get('/recorrencias', async (req, res) => {
+  res.render('recurrences', {
+    recurrences: await getRecurrences(req.session.userId),
+    repeated: await getRepeatedQuestions(req.session.userId)
+  });
+});
+
+router.post('/recorrencias/recalcular', async (req, res) => {
+  await rebuildSimilarity(req.session.userId);
+  res.redirect('/recorrencias');
+});
+
+router.get('/estudar-hoje', async (req, res) => {
+  res.render('study_today', { priorities: await getPriorityMatrix(req.session.userId, 20) });
+});
+
+async function findTrainingQuestions({ userId, discipline, topic, limit = 20 }) {
+  const rows = await db.query(`
+    SELECT q.*, e.ano
+    FROM questions q
+    LEFT JOIN exams e ON e.id=q.exam_id
+    WHERE (q.source='ai_practice' OR e.user_id IS NULL OR e.user_id=$1)
+    ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END, e.ano DESC NULLS LAST, q.id DESC
+    LIMIT 600
+  `, [userId]);
+  const targetDiscipline = canonicalDiscipline(discipline);
+  const targetTopic = canonicalTopic(topic);
+  return rows.filter(q => canonicalDiscipline(q.discipline) === targetDiscipline && canonicalTopic(q.topic) === targetTopic).slice(0, limit);
+}
+
+router.get('/treino', async (req, res) => {
+  const discipline = String(req.query.discipline || '').trim();
+  const topic = String(req.query.topic || '').trim();
+  const questions = discipline && topic ? await findTrainingQuestions({ userId: req.session.userId, discipline, topic }) : [];
+  res.render('training', { discipline, topic, questions });
+});
+
+router.post('/treino/gerar', async (req, res) => {
+  const discipline = String(req.body.discipline || '').trim();
+  const topic = String(req.body.topic || '').trim();
+  if (!discipline || !topic) throw new Error('Disciplina e assunto são obrigatórios.');
+  const examples = (await findTrainingQuestions({ userId: req.session.userId, discipline, topic, limit: 8 })).filter(q => q.source !== 'ai_practice');
+  const generated = await generatePracticeQuestions({ discipline, topic, count: 5, examples });
+  for (const q of generated) {
+    await db.query(`
+      INSERT INTO questions(discipline,topic,statement,alt_a,alt_b,alt_c,alt_d,alt_e,correct_letter,explanation,source)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ai_practice')
+    `, [canonicalDiscipline(discipline), canonicalTopic(topic), q.statement, q.alt_a, q.alt_b, q.alt_c, q.alt_d, q.alt_e || null, q.correct_letter, q.explanation || null]);
+  }
+  res.redirect(`/treino?discipline=${encodeURIComponent(canonicalDiscipline(discipline))}&topic=${encodeURIComponent(canonicalTopic(topic))}`);
+});
+
+router.post('/treino/:id/responder', async (req, res) => {
+  const result = await recordAttempt({ userId: req.session.userId, questionId: Number(req.params.id), letter: req.body.letter, source: 'fixacao' });
+  res.json({ ok: true, ...result });
+});
+
+router.get('/caderno-erros', async (req, res) => {
+  const errors = await db.query(`
+    SELECT qa.*,q.statement,q.discipline,q.topic,q.correct_letter,e.ano
+    FROM question_attempts qa
+    JOIN questions q ON q.id=qa.question_id
+    LEFT JOIN exams e ON e.id=q.exam_id
+    WHERE qa.user_id=$1 AND qa.correct=false
+    ORDER BY qa.answered_at DESC LIMIT 200
+  `, [req.session.userId]);
+  res.render('error_notebook', { errors });
+});
+
+module.exports = router;
