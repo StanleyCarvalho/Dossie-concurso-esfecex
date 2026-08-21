@@ -2,7 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": {
+      "master": true
+    }
   },
   "functions": {
     "server.js": {
