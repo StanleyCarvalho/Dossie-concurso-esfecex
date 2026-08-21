@@ -7,10 +7,17 @@ const db = require('../db/db');
 const { extractTextFromPdf } = require('../services/pdfService');
 const { parseEdital, generatePracticeQuestions, explainQuestion } = require('../services/aiService');
 const { canonicalDiscipline, canonicalTopic, rebuildSimilarity, getRecurrences, getRepeatedQuestions, getPriorityMatrix, recordAttempt } = require('../services/intelligenceEngine');
+const {getStudyTargets,attachProgress}=require('../services/analysisEngine');
+const {getAdaptiveSignals}=require('../services/adaptivePlanEngine');
+const {getOrCreateCurrentWeek,dateMapForWeek,saoPauloNow,isoDate}=require('../services/weeklyPlanSnapshot');
+const {DAY_LABELS}=require('../services/scheduleEngine');
 
 const uploadDir = process.env.VERCEL ? path.join('/tmp', 'editais') : path.join(__dirname, '..', '..', 'uploads', 'editais');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir, limits: { fileSize: 25 * 1024 * 1024 } });
+function planKey(discipline,topic){return `${canonicalDiscipline(discipline).toLowerCase()}||${canonicalTopic(topic).toLowerCase()}`;}
+async function latestEditalTopics(userId){const edital=await db.one('SELECT id FROM editais WHERE user_id=$1 ORDER BY ano DESC,created_at DESC LIMIT 1',[userId]);if(!edital)return[];const topics=await db.query('SELECT * FROM edital_topics WHERE edital_id=$1 ORDER BY discipline,topic,subtopic',[edital.id]);const progressRows=await db.query('SELECT discipline,topic,progress FROM study_progress WHERE user_id=$1',[userId]);const progressMap=new Map(progressRows.map(row=>[planKey(row.discipline,row.topic),Number(row.progress||0)]));return topics.map(item=>({...item,progress:progressMap.get(planKey(item.discipline,item.topic))||0}));}
+async function currentFixedSchedule(userId){const preferences=await db.one('SELECT days,hours_per_day FROM study_plan_preferences WHERE user_id=$1',[userId]);const days=preferences&&Array.isArray(preferences.days)?preferences.days:['mon','tue','wed','thu','fri','sat'];const hoursPerDay=preferences?Math.max(6,Number(preferences.hours_per_day)||6):6;const targets=await attachProgress(await getStudyTargets(60,userId),userId);const editalTopics=await latestEditalTopics(userId);const adaptiveSignals=await getAdaptiveSignals(userId);const {plan}=await getOrCreateCurrentWeek({userId,targets,editalTopics,days,hoursPerDay,adaptiveSignals});return plan;}
 
 async function listEditais(userId){return db.query(`SELECT e.*,COUNT(et.id)::int topics_count FROM editais e LEFT JOIN edital_topics et ON et.edital_id=e.id WHERE e.user_id=$1 GROUP BY e.id ORDER BY e.ano DESC,e.created_at DESC`,[userId])}
 router.get('/editais',async(req,res)=>{const result=req.query.deleted==='1'?{success:true,message:'Edital excluído com sucesso.'}:null;res.render('editais',{editais:await listEditais(req.session.userId),result})});
@@ -19,7 +26,7 @@ router.post('/editais',upload.single('editalPdf'),async(req,res)=>{try{if(!req.f
 router.post('/editais/:id/delete',async(req,res)=>{const deleted=await db.one('DELETE FROM editais WHERE id=$1 AND user_id=$2 RETURNING id',[req.params.id,req.session.userId]);if(!deleted)return res.status(404).render('error',{message:'Edital não encontrado ou você não tem permissão para excluí-lo.'});res.redirect('/editais?deleted=1')});
 router.get('/recorrencias',async(req,res)=>res.render('recurrences',{recurrences:await getRecurrences(req.session.userId),repeated:await getRepeatedQuestions(req.session.userId)}));
 router.post('/recorrencias/recalcular',async(req,res)=>{await rebuildSimilarity(req.session.userId);res.redirect('/recorrencias')});
-router.get('/estudar-hoje',async(req,res)=>res.render('study_today',{priorities:await getPriorityMatrix(req.session.userId,20)}));
+router.get('/estudar-hoje',async(req,res)=>{const plan=await currentFixedSchedule(req.session.userId);const dates=dateMapForWeek(isoDate(plan.week_start));const today=isoDate(saoPauloNow());const todayBlocks=(plan.schedule?.blocks||[]).filter(block=>dates[block.day]===today);res.render('study_today',{priorities:todayBlocks.map(block=>({discipline:block.discipline,topic:block.topic,score:block.score,confidence:block.confidence,years:block.years||[],editalRequired:block.editalRequired,sourceType:block.sourceType,planReason:block.planReason,studyMinutes:block.studyMinutes||120,questionMinutes:block.questionMinutes||60})),fixedWeek:true,weekStart:isoDate(plan.week_start),weekEnd:isoDate(plan.week_end)});});
 
 async function findTrainingQuestions({userId,discipline,topic,limit=20}){const rows=await db.query(`SELECT q.*,e.ano FROM questions q LEFT JOIN exams e ON e.id=q.exam_id WHERE (q.source='ai_practice' AND q.user_id=$1) OR (q.source<>'ai_practice' AND e.user_id=$1) ORDER BY CASE WHEN q.source='ai_practice' THEN 0 ELSE 1 END,e.ano DESC NULLS LAST,q.id DESC LIMIT 600`,[userId]);const targetDiscipline=canonicalDiscipline(discipline),targetTopic=canonicalTopic(topic);return rows.filter(q=>canonicalDiscipline(q.discipline)===targetDiscipline&&canonicalTopic(q.topic)===targetTopic).slice(0,limit)}
 router.get('/treino',async(req,res)=>{const discipline=String(req.query.discipline||'').trim(),topic=String(req.query.topic||'').trim();const questions=discipline&&topic?await findTrainingQuestions({userId:req.session.userId,discipline,topic}):[];res.render('training',{discipline,topic,questions})});
