@@ -1,3 +1,4 @@
+process.env.DATABASE_URL=process.env.DATABASE_URL||'postgresql://test:test@localhost:5432/test';
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {buildWeeklySchedule}=require('../src/services/scheduleEngine');
@@ -14,7 +15,6 @@ const targets=[
   {discipline:'Gerência de Projetos',topic:'PMBOK',score:81},
   {discipline:'Engenharia de Software',topic:'UML',score:80}
 ];
-
 function disciplines(schedule,day){return schedule.blocks.filter(b=>b.day===day).map(b=>b.discipline);}
 
 test('distribui disciplinas conforme o planejamento semanal ESFCEx',()=>{
@@ -32,9 +32,5 @@ test('distribui disciplinas conforme o planejamento semanal ESFCEx',()=>{
 test('cada bloco mantém 2h de estudo e 1h de questões',()=>{
   const schedule=buildWeeklySchedule({targets,editalTopics:[],days:['mon'],hoursPerDay:6,adaptiveSignals:[]});
   assert.equal(schedule.blocks.length,2);
-  for(const block of schedule.blocks){
-    assert.equal(block.minutes,180);
-    assert.equal(block.studyMinutes,120);
-    assert.equal(block.questionMinutes,60);
-  }
+  for(const block of schedule.blocks){assert.equal(block.minutes,180);assert.equal(block.studyMinutes,120);assert.equal(block.questionMinutes,60);}
 });
