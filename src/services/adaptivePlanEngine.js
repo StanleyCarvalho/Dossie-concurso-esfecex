@@ -87,10 +87,19 @@ async function ensureChecklistForBlocks(userId, blocks, dateMap){
   for(const block of blocks){
     const studyDate=dateMap[block.day]; if(!studyDate) continue;
     const micros=getMicrotopics(block.discipline,block.topic).slice(0,4);
+    const theoryMinutes=120;
+    const questionMinutes=60;
+    const perMicroTheory=Math.max(1,Math.floor(theoryMinutes/micros.length));
+    const perMicroQuestions=Math.max(1,Math.floor(questionMinutes/micros.length));
+    let theoryRemainder=theoryMinutes-(perMicroTheory*micros.length);
+    let questionRemainder=questionMinutes-(perMicroQuestions*micros.length);
     for(const micro of micros){
       const resource=getResource(block.discipline,block.topic,micro);
-      for(const taskType of ['teoria','questoes','revisao']){
-        await db.query(`INSERT INTO study_checklist_entries(user_id,study_date,discipline,topic,microtopic,task_type,planned_minutes,resource_title,resource_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_id,study_date,discipline,topic,microtopic,task_type) DO NOTHING`,[userId,studyDate,canonicalDiscipline(block.discipline),canonicalTopic(block.topic),micro,taskType,Math.max(10,Math.round(block.minutes/12)),resource.title,resource.url]);
+      const theoryPlanned=perMicroTheory+(theoryRemainder-->0?1:0);
+      const questionsPlanned=perMicroQuestions+(questionRemainder-->0?1:0);
+      const tasks=[['teoria',theoryPlanned],['questoes',questionsPlanned]];
+      for(const [taskType,plannedMinutes] of tasks){
+        await db.query(`INSERT INTO study_checklist_entries(user_id,study_date,discipline,topic,microtopic,task_type,planned_minutes,resource_title,resource_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_id,study_date,discipline,topic,microtopic,task_type) DO UPDATE SET planned_minutes=EXCLUDED.planned_minutes,resource_title=EXCLUDED.resource_title,resource_url=EXCLUDED.resource_url`,[userId,studyDate,canonicalDiscipline(block.discipline),canonicalTopic(block.topic),micro,taskType,plannedMinutes,resource.title,resource.url]);
       }
     }
   }
