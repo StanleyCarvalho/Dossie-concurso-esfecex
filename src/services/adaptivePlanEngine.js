@@ -8,7 +8,7 @@ const FREE_RESOURCES = [
   { test:/php/i, title:'PHP — Manual oficial em português', url:'https://www.php.net/manual/pt_BR/', provider:'PHP', kind:'manual oficial gratuito' },
   { test:/linux|chmod|chown|permiss|shell|grep|arquivo/i, title:'GNU Coreutils — Manual oficial', url:'https://www.gnu.org/software/coreutils/manual/coreutils.html', provider:'GNU', kind:'manual oficial gratuito' },
   { test:/arquitetura|cpu|memoria|cache|barramento|raid|sistema.*numer/i, title:'UNIVESP — Arquitetura e Organização de Computadores', url:'https://www.youtube.com/watch?v=zStcn5aMLug', provider:'UNIVESP', kind:'videoaula universitária gratuita' },
-  { test:/tipologia|interpret|compreens|coesao|coerencia|conectiv/i, title:'LAC Concursos — Tipologia e interpretação de textos', url:'https://www.youtube.com/watch?v=LbP2OfuObBM', provider:'LAC Concursos', kind:'videoaula gratuita' },
+  { test:/tipologia|interpret|compreens|coesao|coerencia|conectiv|crase|regencia|concordancia|pontuacao/i, title:'YouTube — Português para concursos VUNESP', url:'https://www.youtube.com/results?search_query=portugu%C3%AAs+VUNESP+interpreta%C3%A7%C3%A3o+gram%C3%A1tica+concursos', provider:'YouTube', kind:'videoaulas gratuitas' },
   { test:/uml|engenharia.*software|caso.*uso|diagrama/i, title:'UNIVESP — Engenharia de Software', url:'https://www.youtube.com/results?search_query=UNIVESP+Engenharia+de+Software+UML', provider:'UNIVESP', kind:'videoaulas gratuitas' },
   { test:/rede|tcp|ip|dns|http|osi|sub.?rede/i, title:'Bóson Treinamentos — Redes de Computadores', url:'https://www.youtube.com/results?search_query=B%C3%B3son+Treinamentos+redes+de+computadores+TCP%2FIP', provider:'Bóson Treinamentos', kind:'videoaulas gratuitas' },
   { test:/seguran|criptograf|hash|autentica|certific/i, title:'Bóson Treinamentos — Segurança da Informação', url:'https://www.youtube.com/results?search_query=B%C3%B3son+Treinamentos+seguran%C3%A7a+da+informa%C3%A7%C3%A3o+criptografia', provider:'Bóson Treinamentos', kind:'videoaulas gratuitas' },
@@ -19,90 +19,43 @@ const FREE_RESOURCES = [
 ];
 
 const MICROTOPICS = [
-  { test:/raid/i, items:['RAID 0: striping e desempenho','RAID 1: espelhamento','RAID 4: paridade dedicada','RAID 5: paridade distribuída e capacidade útil','RAID 6: dupla paridade','RAID 10: espelhamento + striping','cálculo de capacidade e tolerância a falhas'] },
+  { test:/raid/i, items:['RAID 0: striping, desempenho e ausência de redundância','RAID 1: espelhamento e tolerância a falhas','RAID 4: paridade dedicada e gargalo de escrita','RAID 5: paridade distribuída, capacidade útil e falha de 1 disco','RAID 6: dupla paridade e falha de 2 discos','RAID 10: espelhamento + striping','cálculo de capacidade útil e tolerância a falhas'] },
   { test:/sistemas? de numera/i, items:['conversão binário ↔ decimal','hexadecimal e octal','complemento de dois','representação de inteiros com sinal','aritmética binária e overflow'] },
-  { test:/sql/i, items:['SELECT, WHERE e operadores','LIKE e padrões','INNER/LEFT/RIGHT/FULL JOIN','GROUP BY, HAVING e agregações','subconsultas','DDL x DML','chaves e integridade referencial','transações e isolamento'] },
-  { test:/controle de concorr/i, items:['ACID e isolamento','anomalias: dirty/non-repeatable/phantom read','locks e bloqueios','serialização','deadlock','MVCC'] },
-  { test:/linux/i, items:['permissões rwx e notação octal','chmod, chown e chgrp','processos: ps, top, kill','sistema de arquivos e links','pipes e redirecionamento','grep/find e filtros','usuários e grupos'] },
-  { test:/shell/i, items:['variáveis e expansão','if/case','for/while','test e operadores','pipes/redirecionamentos','grep/sed/awk básicos'] },
-  { test:/java/i, items:['modificadores de acesso','final/static/abstract','herança e polimorfismo','interfaces','String e imutabilidade','collections','exceções','sobrecarga x sobrescrita'] },
-  { test:/php/i, items:['tipos e operadores','arrays associativos','strings','funções','POO','superglobais','sessões/cookies','acesso a banco/PDO'] },
-  { test:/uml/i, items:['diagramas estruturais x comportamentais','diagrama de classes','visibilidade e multiplicidade','casos de uso','sequência','atividade','relacionamentos: associação/agregação/composição/generalização'] },
-  { test:/pmbok/i, items:['princípios e domínios de desempenho','escopo','cronograma','custos','riscos','stakeholders','mudanças e integração','processos/artefatos cobrados no edital'] },
-  { test:/cobit/i, items:['princípios do framework','objetivos de governança e gestão','EDM/APO/BAI/DSS/MEA','componentes do sistema de governança','metas em cascata','níveis/capacidade quando previstos no edital'] },
-  { test:/tipologia textual/i, items:['narração','descrição','dissertação expositiva','dissertação argumentativa','injunção','finalidade e predominância textual'] },
+  { test:/sql/i, items:['SELECT, WHERE e operadores lógicos','LIKE e curingas','INNER/LEFT/RIGHT/FULL JOIN','GROUP BY, HAVING e funções de agregação','subconsultas correlacionadas e não correlacionadas','DDL x DML x DCL','PK, FK, UNIQUE e integridade referencial','transações, COMMIT e ROLLBACK'] },
+  { test:/controle de concorr/i, items:['ACID e níveis de isolamento','dirty read, non-repeatable read e phantom read','locks compartilhados/exclusivos','serialização de transações','deadlock: detecção e prevenção','MVCC'] },
+  { test:/linux/i, items:['permissões rwx e notação octal','chmod, chown e chgrp','processos: ps, top, kill e sinais','sistema de arquivos, links simbólicos e hard links','pipes e redirecionamento','grep, find, sed e awk básicos','usuários, grupos e sudo'] },
+  { test:/shell/i, items:['variáveis e expansão','if/case','for/while','test e operadores','pipes e redirecionamentos','grep/sed/awk em scripts'] },
+  { test:/java/i, items:['modificadores de acesso','final, static e abstract','herança e polimorfismo','interfaces','String e imutabilidade','Collections','exceções','sobrecarga x sobrescrita'] },
+  { test:/php/i, items:['tipos e operadores','arrays associativos','strings','funções','POO','superglobais','sessões/cookies','PDO e acesso a banco'] },
+  { test:/uml/i, items:['diagramas estruturais x comportamentais','diagrama de classes','visibilidade e multiplicidade','casos de uso','sequência','atividade','associação, agregação, composição e generalização'] },
+  { test:/pmbok/i, items:['princípios e domínios de desempenho','integração e controle de mudanças','escopo e EAP','cronograma e caminho crítico','custos e valor agregado','riscos','stakeholders e comunicação','artefatos e práticas previstos no edital'] },
+  { test:/cobit/i, items:['objetivos de governança e gestão','EDM/APO/BAI/DSS/MEA','componentes do sistema de governança','metas em cascata','princípios do COBIT','capacidade/maturidade quando prevista no edital'] },
+  { test:/tipologia textual/i, items:['narração','descrição','exposição','argumentação','injunção','gênero x tipo textual e predominância'] },
   { test:/coes[aã]o|conectiv/i, items:['referenciação','substituição e elipse','conjunções e relações semânticas','coesão lexical','valor argumentativo dos conectivos'] },
   { test:/historia do brasil colonial/i, items:['administração colonial','economia açucareira','mineração','escravidão','expansão territorial','revoltas coloniais','crise do sistema colonial'] },
   { test:/historia do brasil imp/i, items:['Primeiro Reinado','Período Regencial','Segundo Reinado','café e escravidão','Guerra do Paraguai','abolição','crise da monarquia'] },
   { test:/historia do brasil rep/i, items:['República Velha','Era Vargas','República de 1946','regime militar','redemocratização','Constituição de 1988'] },
-  { test:/dom[ií]nios morfoclim/i, items:['Amazônico','Cerrado','Caatinga','Mares de Morros','Araucárias','Pradarias','faixas de transição'] }
+  { test:/dom[ií]nios morfoclim/i, items:['Amazônico','Cerrado','Caatinga','Mares de Morros','Araucárias','Pradarias','faixas de transição'] },
+  { test:/programa[cç][aã]o/i, items:['lógica, algoritmos e pseudocódigo','condicionais e laços','vetores, matrizes e strings','funções e passagem de parâmetros','recursividade','C/C++: ponteiros, alocação, structs e strings','orientação a objetos: classes, herança e polimorfismo','Python: slicing, listas, tuplas e dicionários','paralelismo: OpenMP e MPI quando previsto no edital'] },
+  { test:/portugu[eê]s|l[ií]ngua portuguesa/i, items:['compreensão e interpretação de textos','pressupostos, subentendidos e implícitos','tipos e gêneros textuais','coesão e coerência','morfossintaxe do período simples','coordenação e subordinação','pontuação','concordância verbal e nominal','regência e crase','colocação pronominal'] },
+  { test:/redes/i, items:['modelos OSI e TCP/IP','IPv4, máscara e cálculo de sub-redes','IPv6 e representação','ARP, ICMP e roteamento IP','TCP x UDP e portas','DNS e DHCP','HTTP/HTTPS e TLS','switching, VLAN e conceitos de roteamento','segurança de redes e firewalls quando previsto no edital'] },
+  { test:/sistemas operacionais/i, items:['processos, threads e escalonamento','concorrência e sincronização','deadlocks','gerenciamento de memória, paginação e memória virtual','sistemas de arquivos','E/S e dispositivos','Linux: permissões, processos e comandos','shell script'] },
+  { test:/banco de dados/i, items:['modelo relacional e álgebra relacional','normalização: 1FN, 2FN, 3FN e BCNF','SQL de consulta e junções','restrições e integridade','índices e planos de acesso','transações e ACID','controle de concorrência e isolamento','backup/recuperação quando previsto no edital'] },
+  { test:/arquitetura de computadores|arquitetura/i, items:['sistemas de numeração e representação de dados','CPU, ULA, registradores e ciclo de instrução','hierarquia de memória: cache, RAM e armazenamento','mapeamento e políticas de cache','barramentos e E/S','RAID e armazenamento','pipeline e paralelismo','desempenho: latência, throughput e métricas'] },
+  { test:/engenharia de software/i, items:['processos e modelos de ciclo de vida','requisitos funcionais e não funcionais','UML e modelagem','orientação a objetos e princípios de projeto','testes: unidade, integração, sistema e aceitação','qualidade e manutenção','métodos ágeis quando previstos no edital'] },
+  { test:/ger[eê]ncia de projetos/i, items:['PMBOK: princípios e domínios','integração, escopo e cronograma','custos e valor agregado','qualidade e recursos','comunicação e stakeholders','riscos','aquisições','métodos ágeis/híbridos quando previstos no edital'] },
+  { test:/hist[oó]ria/i, items:['Brasil Colonial: administração, economia e escravidão','Independência e Primeiro Reinado','Regências e Segundo Reinado','República Velha','Era Vargas','República de 1946','regime militar','redemocratização e Nova República'] },
+  { test:/geografia/i, items:['formação territorial e regionalização do Brasil','relevo, clima, vegetação e domínios morfoclimáticos','hidrografia e recursos naturais','população, migrações e urbanização','agropecuária e estrutura fundiária','industrialização e redes urbanas','energia, transportes e infraestrutura','questões ambientais brasileiras'] }
 ];
 
 function normalize(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
-function getResource(discipline, topic, microtopic=''){
-  const haystack=normalize(`${discipline} ${topic} ${microtopic}`);
-  const hit=FREE_RESOURCES.find(r=>r.test.test(haystack));
-  if(hit) return hit;
-  return { title:`Pesquisa focada: ${microtopic||topic}`, url:`https://www.youtube.com/results?search_query=${encodeURIComponent(`${microtopic||topic} ${discipline} concurso VUNESP aula`)}`, provider:'YouTube', kind:'busca focada gratuita' };
-}
-function getMicrotopics(discipline, topic){
-  const haystack=normalize(`${discipline} ${topic}`);
-  const hit=MICROTOPICS.find(m=>m.test.test(haystack));
-  return hit ? hit.items : [String(topic),`conceitos fundamentais de ${topic}`,`aplicações e pegadinhas de ${topic}`,`questões VUNESP sobre ${topic}`];
-}
+function getResource(discipline, topic, microtopic=''){const haystack=normalize(`${discipline} ${topic} ${microtopic}`);const hit=FREE_RESOURCES.find(r=>r.test.test(haystack));if(hit)return hit;return{title:`Pesquisa focada: ${microtopic||topic}`,url:`https://www.youtube.com/results?search_query=${encodeURIComponent(`${microtopic||topic} ${discipline} concurso VUNESP aula`)}`,provider:'YouTube',kind:'busca focada gratuita'};}
+function editalItems(reference=''){return String(reference||'').split(/\n|•|;|\u2022/).map(v=>v.replace(/^[-–—\s]+/,'').trim()).filter(v=>v.length>=8&&v.length<=180).slice(0,4);}
+function getMicrotopics(discipline,topic,editalReference=''){const haystack=normalize(`${discipline} ${topic}`);const hit=MICROTOPICS.find(m=>m.test.test(haystack));const historical=hit?hit.items:[String(topic),`conceitos fundamentais de ${topic}`,`aplicações e pegadinhas de ${topic}`,`questões VUNESP sobre ${topic}`];const official=editalItems(editalReference);return[...new Set([...official,...historical])];}
 
-async function getChecklistState(userId, dates=[]){
-  if(!dates.length) return [];
-  return db.query(`SELECT * FROM study_checklist_entries WHERE user_id=$1 AND study_date = ANY($2::date[]) ORDER BY study_date, id`,[userId,dates]);
-}
-
-async function getAdaptiveSignals(userId){
-  const rows=await db.query(`WITH checklist AS (
-    SELECT discipline,topic,COUNT(*)::numeric planned,COUNT(*) FILTER(WHERE completed)::numeric done
-    FROM study_checklist_entries WHERE user_id=$1 AND study_date>=CURRENT_DATE-28 GROUP BY discipline,topic
-  ), attempts AS (
-    SELECT q.discipline,q.topic,COUNT(*)::numeric attempts,COUNT(*) FILTER(WHERE qa.correct)::numeric correct
-    FROM question_attempts qa JOIN questions q ON q.id=qa.question_id WHERE qa.user_id=$1 AND qa.answered_at>=CURRENT_DATE-28 GROUP BY q.discipline,q.topic
-  ) SELECT COALESCE(c.discipline,a.discipline) discipline,COALESCE(c.topic,a.topic) topic,
-    COALESCE(c.planned,0)::int planned,COALESCE(c.done,0)::int done,COALESCE(a.attempts,0)::int attempts,COALESCE(a.correct,0)::int correct
-    FROM checklist c FULL JOIN attempts a ON lower(c.discipline)=lower(a.discipline) AND lower(c.topic)=lower(a.topic)`,[userId]);
-  return rows.map(r=>({
-    ...r,
-    completionRate:r.planned?Math.round((r.done/r.planned)*100):0,
-    accuracy:r.attempts?Math.round((r.correct/r.attempts)*100):0,
-    weakness:Math.round(((100-(r.planned?Math.round((r.done/r.planned)*100):0))*0.45)+((100-(r.attempts?Math.round((r.correct/r.attempts)*100):0))*0.55))
-  }));
-}
-
-async function getPerformanceByDiscipline(userId){
-  const rows=await db.query(`WITH c AS (SELECT discipline,COUNT(*)::numeric planned,COUNT(*) FILTER(WHERE completed)::numeric done FROM study_checklist_entries WHERE user_id=$1 GROUP BY discipline), a AS (SELECT q.discipline,COUNT(*)::numeric attempts,COUNT(*) FILTER(WHERE qa.correct)::numeric correct FROM question_attempts qa JOIN questions q ON q.id=qa.question_id WHERE qa.user_id=$1 GROUP BY q.discipline) SELECT COALESCE(c.discipline,a.discipline) discipline,COALESCE(c.planned,0)::int planned,COALESCE(c.done,0)::int done,COALESCE(a.attempts,0)::int attempts,COALESCE(a.correct,0)::int correct FROM c FULL JOIN a ON lower(c.discipline)=lower(a.discipline) ORDER BY 1`,[userId]);
-  return rows.map(r=>{const checklist=r.planned?Math.round(r.done/r.planned*100):0;const accuracy=r.attempts?Math.round(r.correct/r.attempts*100):0;const performance=Math.round(checklist*.4+accuracy*.6);return {...r,checklist,accuracy,performance,need:100-performance};}).sort((a,b)=>b.need-a.need);
-}
-
-async function getHistory(userId){
-  return db.query(`SELECT study_date::text date,COUNT(*)::int planned,COUNT(*) FILTER(WHERE completed)::int done,ROUND((COUNT(*) FILTER(WHERE completed)::numeric/NULLIF(COUNT(*),0))*100)::int completion FROM study_checklist_entries WHERE user_id=$1 GROUP BY study_date ORDER BY study_date DESC LIMIT 28`,[userId]);
-}
-
-async function ensureChecklistForBlocks(userId, blocks, dateMap){
-  for(const block of blocks){
-    const studyDate=dateMap[block.day]; if(!studyDate) continue;
-    const micros=getMicrotopics(block.discipline,block.topic).slice(0,4);
-    const theoryMinutes=120;
-    const questionMinutes=60;
-    const perMicroTheory=Math.max(1,Math.floor(theoryMinutes/micros.length));
-    const perMicroQuestions=Math.max(1,Math.floor(questionMinutes/micros.length));
-    let theoryRemainder=theoryMinutes-(perMicroTheory*micros.length);
-    let questionRemainder=questionMinutes-(perMicroQuestions*micros.length);
-    for(const micro of micros){
-      const resource=getResource(block.discipline,block.topic,micro);
-      const theoryPlanned=perMicroTheory+(theoryRemainder-->0?1:0);
-      const questionsPlanned=perMicroQuestions+(questionRemainder-->0?1:0);
-      const tasks=[['teoria',theoryPlanned],['questoes',questionsPlanned]];
-      for(const [taskType,plannedMinutes] of tasks){
-        await db.query(`INSERT INTO study_checklist_entries(user_id,study_date,discipline,topic,microtopic,task_type,planned_minutes,resource_title,resource_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_id,study_date,discipline,topic,microtopic,task_type) DO UPDATE SET planned_minutes=EXCLUDED.planned_minutes,resource_title=EXCLUDED.resource_title,resource_url=EXCLUDED.resource_url`,[userId,studyDate,canonicalDiscipline(block.discipline),canonicalTopic(block.topic),micro,taskType,plannedMinutes,resource.title,resource.url]);
-      }
-    }
-  }
-}
-
+async function getChecklistState(userId,dates=[]){if(!dates.length)return[];return db.query(`SELECT * FROM study_checklist_entries WHERE user_id=$1 AND study_date = ANY($2::date[]) ORDER BY study_date,id`,[userId,dates]);}
+async function getAdaptiveSignals(userId){const rows=await db.query(`WITH checklist AS (SELECT discipline,topic,COUNT(*)::numeric planned,COUNT(*) FILTER(WHERE completed)::numeric done FROM study_checklist_entries WHERE user_id=$1 AND study_date>=CURRENT_DATE-28 GROUP BY discipline,topic),attempts AS (SELECT q.discipline,q.topic,COUNT(*)::numeric attempts,COUNT(*) FILTER(WHERE qa.correct)::numeric correct FROM question_attempts qa JOIN questions q ON q.id=qa.question_id WHERE qa.user_id=$1 AND qa.answered_at>=CURRENT_DATE-28 GROUP BY q.discipline,q.topic) SELECT COALESCE(c.discipline,a.discipline) discipline,COALESCE(c.topic,a.topic) topic,COALESCE(c.planned,0)::int planned,COALESCE(c.done,0)::int done,COALESCE(a.attempts,0)::int attempts,COALESCE(a.correct,0)::int correct FROM checklist c FULL JOIN attempts a ON lower(c.discipline)=lower(a.discipline) AND lower(c.topic)=lower(a.topic)`,[userId]);return rows.map(r=>({...r,completionRate:r.planned?Math.round((r.done/r.planned)*100):0,accuracy:r.attempts?Math.round((r.correct/r.attempts)*100):0,weakness:Math.round(((100-(r.planned?Math.round((r.done/r.planned)*100):0))*.45)+((100-(r.attempts?Math.round((r.correct/r.attempts)*100):0))*.55))}));}
+async function getPerformanceByDiscipline(userId){const rows=await db.query(`WITH c AS (SELECT discipline,COUNT(*)::numeric planned,COUNT(*) FILTER(WHERE completed)::numeric done FROM study_checklist_entries WHERE user_id=$1 GROUP BY discipline),a AS (SELECT q.discipline,COUNT(*)::numeric attempts,COUNT(*) FILTER(WHERE qa.correct)::numeric correct FROM question_attempts qa JOIN questions q ON q.id=qa.question_id WHERE qa.user_id=$1 GROUP BY q.discipline) SELECT COALESCE(c.discipline,a.discipline) discipline,COALESCE(c.planned,0)::int planned,COALESCE(c.done,0)::int done,COALESCE(a.attempts,0)::int attempts,COALESCE(a.correct,0)::int correct FROM c FULL JOIN a ON lower(c.discipline)=lower(a.discipline) ORDER BY 1`,[userId]);return rows.map(r=>{const checklist=r.planned?Math.round(r.done/r.planned*100):0,accuracy=r.attempts?Math.round(r.correct/r.attempts*100):0,performance=Math.round(checklist*.4+accuracy*.6);return{...r,checklist,accuracy,performance,need:100-performance}}).sort((a,b)=>b.need-a.need);}
+async function getHistory(userId){return db.query(`SELECT study_date::text date,COUNT(*)::int planned,COUNT(*) FILTER(WHERE completed)::int done,ROUND((COUNT(*) FILTER(WHERE completed)::numeric/NULLIF(COUNT(*),0))*100)::int completion FROM study_checklist_entries WHERE user_id=$1 GROUP BY study_date ORDER BY study_date DESC LIMIT 28`,[userId]);}
+async function ensureChecklistForBlocks(userId,blocks,dateMap){for(const block of blocks){const studyDate=dateMap[block.day];if(!studyDate)continue;const micros=getMicrotopics(block.discipline,block.topic,block.editalReference).slice(0,4),theoryMinutes=120,questionMinutes=60,perMicroTheory=Math.max(1,Math.floor(theoryMinutes/micros.length)),perMicroQuestions=Math.max(1,Math.floor(questionMinutes/micros.length));let theoryRemainder=theoryMinutes-(perMicroTheory*micros.length),questionRemainder=questionMinutes-(perMicroQuestions*micros.length);for(const micro of micros){const resource=getResource(block.discipline,block.topic,micro),theoryPlanned=perMicroTheory+(theoryRemainder-->0?1:0),questionsPlanned=perMicroQuestions+(questionRemainder-->0?1:0);for(const [taskType,plannedMinutes] of [['teoria',theoryPlanned],['questoes',questionsPlanned]]){await db.query(`INSERT INTO study_checklist_entries(user_id,study_date,discipline,topic,microtopic,task_type,planned_minutes,resource_title,resource_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_id,study_date,discipline,topic,microtopic,task_type) DO UPDATE SET planned_minutes=EXCLUDED.planned_minutes,resource_title=EXCLUDED.resource_title,resource_url=EXCLUDED.resource_url`,[userId,studyDate,canonicalDiscipline(block.discipline),canonicalTopic(block.topic),micro,taskType,plannedMinutes,resource.title,resource.url]);}}}}
 module.exports={getResource,getMicrotopics,getChecklistState,getAdaptiveSignals,getPerformanceByDiscipline,getHistory,ensureChecklistForBlocks};
